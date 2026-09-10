@@ -1,0 +1,10 @@
+docker run --rm -it \
+  -p 15353:53/udp \
+  -v "$(pwd)/dns_interceptor:/app" \
+  -w /app \
+  rust:latest \
+  bash -c "cargo install cargo-watch && cargo watch -x run"
+
+
+De momento lo dejo como comando suelto. Ya luego hacemos el docker compose que levante
+todos los contenedores.
