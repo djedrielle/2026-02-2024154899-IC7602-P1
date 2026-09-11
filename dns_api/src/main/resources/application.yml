@@ -1,0 +1,25 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+dns:
+  remote:
+    ip: ${DNS_REMOTE_IP:8.8.8.8}
+
+spring:
+  datasource:
+    url: ${SUPABASE_DB_URL}
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.tec.dnsapi: DEBUG
