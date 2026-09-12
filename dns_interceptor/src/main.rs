@@ -1,4 +1,7 @@
 use std::net::UdpSocket;
+use std::net::Ipv4Addr;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 
 fn main() -> std::io::Result<()> {
     {
@@ -20,11 +23,22 @@ fn main() -> std::io::Result<()> {
             println!("Host: {}", host);
             // consultar a DNS API (/api/exists) si existe un registro para este host
         } else {
+            // Esta seccion se corre cuando nos llega una respuesta
+            // del DNS API indicando que no existe registro de ese host
+            // en la base de datos, entonces se tiene que resolver con un
+            // host externo
+
             // codificar en base64
+            let codificado = codificar_base64(&buffer_solicitud[..amt]);
+            println!("Codificado: {}", codificado);
             // enviar via HTTPS a POST /api/dns_resolver
 
         }
+
+        let buffer_respuesta = construir_respuesta(&buffer_solicitud, "93.184.216.34");
         
+        socket.send_to(&buffer_respuesta, &src);
+
         println!("{}", QR);
         println!("{}", op_code);
 
@@ -54,4 +68,61 @@ fn extraer_host(buffer_solicitud: &[u8]) -> String {
         }
     }
     host
+}
+
+fn codificar_base64(buffer: &[u8]) -> String {
+    STANDARD.encode(buffer)
+}
+
+// Funcion para decodificar
+
+fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Vec<u8> {
+    // Encontrar el final de Question
+    let mut longitud_label;
+    let mut i = 12;
+
+    while buffer_solicitud[i] != 0 {
+        longitud_label = buffer_solicitud[i];
+        i = i + longitud_label as usize + 1;
+    }
+
+    let i_final_question = i + 5;
+
+    // Copiar el buffer de la consulta
+    let mut buffer_respuesta = Vec::new();
+    buffer_respuesta.extend_from_slice(&buffer_solicitud[..i_final_question]);
+    
+    buffer_respuesta[2] |= 0x80; // Cambiar QR a 1 (indicar que es una respuesta)
+    buffer_respuesta[7] = 0x1; // Cambiar ANCOUNT (indicar que hay una respuesta)
+    
+    // NAME de la respuesta. Pasamos un puntero a donde se encuentra el name del query
+    buffer_respuesta.push(0xC0); // Indicar que es puntero
+    buffer_respuesta.push(0x0C); // Indicar el offset desde el inicio (12)
+
+    // TYPE -> A = 1
+    buffer_respuesta.push(0x00); 
+    buffer_respuesta.push(0x01);
+
+    // CLASS -> IN = 1
+    buffer_respuesta.push(0x00); 
+    buffer_respuesta.push(0x01);
+
+    // TTL -> 300 seg
+    buffer_respuesta.push(0x00); 
+    buffer_respuesta.push(0x00);
+    buffer_respuesta.push(0x01); 
+    buffer_respuesta.push(0x2c);
+
+    // RDLENGHT -> es IPv4 por lo tanto es 4
+    buffer_respuesta.push(0x00); 
+    buffer_respuesta.push(0x04);
+
+    // Parsear la ip y pushear los octetos al buffer
+    let address: Ipv4Addr = ip.parse().expect("IP invalida");
+    let octetos = address.octets();
+    buffer_respuesta.extend_from_slice(&octetos);
+    
+    println!("buffer_respuesta: {:02x?}", &buffer_respuesta);
+    
+    buffer_respuesta
 }
