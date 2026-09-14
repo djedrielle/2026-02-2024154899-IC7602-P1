@@ -43,6 +43,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // enviar via HTTPS a POST /api/dns_resolver
             } else {
                 println!("Hay registro para este host");
+
+                match body["type"].as_str() {
+                    Some("single") => println!("single"),
+                    Some("multi") => println!("multi"),
+                    Some("weight") => println!("weight"),
+                    Some("round-trip") => println!("rr"),
+                    Some("geo") => println!("geo"),
+                    _ => println!("Tipo de registro no soportado."),
+                }
                 println!("Body: {}", body);
             }
         } else {
