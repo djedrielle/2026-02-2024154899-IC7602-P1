@@ -1,16 +1,24 @@
 use std::net::UdpSocket;
 use std::net::Ipv4Addr;
+use std::env;
+use std::error::Error;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     {
         let socket = UdpSocket::bind("0.0.0.0:53")?;
+        
+        // Cliente HTTPS
+        let client = reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(true)   // acepta el cert self-signed (solo dev)
+        .build()?;
+        
+        // Obtener la URL del DNS API
+        let dns_api_url = env::var("DNS_API_URL").unwrap_or_else(|_| "https://host.docker.internal:8443".to_string());
 
         let mut buffer_solicitud = [0; 512]; // Buffer para recibir la solicitud del cliente
         let (amt, src) = socket.recv_from(&mut buffer_solicitud)?; // Esperar la solicitud y guardarla en el buffer
-
-        println!("{:02x?}", &buffer_solicitud[..amt]); // Imprimir la solicitud
 
         // Extraer valores de la solicitud enviada por el cliente
         // let id = u16::from_be_bytes([buffer_solicitud[0],buffer_solicitud[1]]); // Extraer id (mas adelante hay que incluirlo en la respuesta)
@@ -19,29 +27,31 @@ fn main() -> std::io::Result<()> {
 
         if !QR && op_code == 0 {
             // identificar el host que se esta tratando de resolver
-            let host = extraer_host(&buffer_solicitud[12..]); // [12..] para saltarnos el header
-            println!("Host: {}", host);
-            // consultar a DNS API (/api/exists) si existe un registro para este host
+            let domain = extraer_host(&buffer_solicitud[12..]); // [12..] para saltarnos el header
+            
+            // consultar a DNS API (GET /api/exists) si existe un registro para este host
+            let url = format!("{}/api/exists?domain={}", dns_api_url, domain);
+            let response = client.get(&url).send()?;
+            let body: serde_json::Value = response.json()?;
+
+            if body.as_bool() == Some(false) {
+                // Si no existe registro para este dominio entonces codificar
+                // la solicitud y enviarla a POST /api/dns_resolver via HTTPS
+                let codificado = codificar_base64(&buffer_solicitud[..amt]);
+
+                println!("No hay registro para este host");
+                // enviar via HTTPS a POST /api/dns_resolver
+            } else {
+                println!("Hay registro para este host");
+                println!("Body: {}", body);
+            }
         } else {
-            // Esta seccion se corre cuando nos llega una respuesta
-            // del DNS API indicando que no existe registro de ese host
-            // en la base de datos, entonces se tiene que resolver con un
-            // host externo
-
-            // codificar en base64
-            let codificado = codificar_base64(&buffer_solicitud[..amt]);
-            println!("Codificado: {}", codificado);
-            // enviar via HTTPS a POST /api/dns_resolver
-
+            println!("No estandar query");
         }
 
-        let buffer_respuesta = construir_respuesta(&buffer_solicitud, "93.184.216.34");
+        //let buffer_respuesta = construir_respuesta(&buffer_solicitud, "93.184.216.34");
         
-        socket.send_to(&buffer_respuesta, &src);
-
-        println!("{}", QR);
-        println!("{}", op_code);
-
+        //socket.send_to(&buffer_respuesta, &src);
         
     } // the socket is closed here
     Ok(())

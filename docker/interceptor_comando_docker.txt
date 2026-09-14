@@ -2,6 +2,8 @@ docker run --rm -it \
   -p 15353:53/udp \
   -v "$(pwd)/dns_interceptor:/app" \
   -w /app \
+  --add-host=host.docker.internal:host-gateway \
+  -e DNS_API_URL=https://host.docker.internal:8443 \
   rust:latest \
   bash -c "cargo install cargo-watch && cargo watch -x run"
 
