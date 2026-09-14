@@ -62,13 +62,22 @@ false
 ```bash
 cd dns_interceptor/dns_api_mock
 sudo docker build -t dns_api_mock .
-sudo docker run --rm -p 8443:8443 dns_api_mock
+sudo docker run --rm -p 8443:8443 -v "$(pwd):/app" dns_api_mock
 ```
+
+El `-v "$(pwd):/app"` monta tu código dentro del contenedor y activa la
+**recarga en vivo**: al editar `app.py`, `records.json` o `ip_to_country.json`
+en el host, uvicorn (`--reload`) detecta el cambio y reinicia solo. No hay que
+reconstruir la imagen ni reiniciar el contenedor.
+
+> El certificado HTTPS vive en `/certs` (no en `/app`), así que el bind mount no
+> lo oculta. Solo reconstruye la imagen (`docker build`) si cambias
+> dependencias (`requirements.txt`) o el `Dockerfile`.
 
 Servidor DNS remoto configurable (para `/api/dns_resolver`):
 
 ```bash
-sudo docker run --rm -p 8443:8443 -e REMOTE_DNS=1.1.1.1 dns_api_mock
+sudo docker run --rm -p 8443:8443 -v "$(pwd):/app" -e REMOTE_DNS=1.1.1.1 dns_api_mock
 ```
 
 ## Probar (curl)

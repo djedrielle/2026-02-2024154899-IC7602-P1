@@ -34,6 +34,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let response = client.get(&url).send()?;
             let body: serde_json::Value = response.json()?;
 
+            println!("Body: {}", body);
+
             if body.as_bool() == Some(false) {
                 // Si no existe registro para este dominio entonces codificar
                 // la solicitud y enviarla a POST /api/dns_resolver via HTTPS
@@ -46,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut ip = String::new();
                 match body["type"].as_str() {
                     Some("single") => ip = single_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
-                    Some("multi") => println!("multi"),
+                    Some("multi") => ip = multi_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?, body["counter"].as_u64().ok_or("Este registro no posee campo counter valido.")?),
                     Some("weight") => println!("weight"),
                     Some("round-trip") => println!("rr"),
                     Some("geo") => println!("geo"),
@@ -148,4 +150,9 @@ fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Vec<u8> {
 
 fn single_ip(ips: &[serde_json::Value]) -> String {
     ips[0]["ip"].as_str().unwrap().to_string()
+}
+
+fn multi_ip(ips: &[serde_json::Value], counter: u64) -> String {
+    let index = (counter as usize) % ips.len();
+    ips[index]["ip"].as_str().unwrap().to_string()
 }
