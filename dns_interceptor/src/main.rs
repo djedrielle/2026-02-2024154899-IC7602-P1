@@ -43,16 +43,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // enviar via HTTPS a POST /api/dns_resolver
             } else {
                 println!("Hay registro para este host");
-
+                let mut ip = String::new();
                 match body["type"].as_str() {
-                    Some("single") => println!("single"),
+                    Some("single") => ip = single_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
                     Some("multi") => println!("multi"),
                     Some("weight") => println!("weight"),
                     Some("round-trip") => println!("rr"),
                     Some("geo") => println!("geo"),
                     _ => println!("Tipo de registro no soportado."),
                 }
-                println!("Body: {}", body);
+                println!("IP: {}", ip);
             }
         } else {
             println!("No estandar query");
@@ -144,4 +144,8 @@ fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Vec<u8> {
     println!("buffer_respuesta: {:02x?}", &buffer_respuesta);
     
     buffer_respuesta
+}
+
+fn single_ip(ips: &[serde_json::Value]) -> String {
+    ips[0]["ip"].as_str().unwrap().to_string()
 }
