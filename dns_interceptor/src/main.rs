@@ -4,6 +4,8 @@ use std::env;
 use std::error::Error;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use rand::distr::weighted::WeightedIndex;
+use rand::prelude::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
     {
@@ -49,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 match body["type"].as_str() {
                     Some("single") => ip = single_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
                     Some("multi") => ip = multi_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?, body["counter"].as_u64().ok_or("Este registro no posee campo counter valido.")?),
-                    Some("weight") => println!("weight"),
+                    Some("weight") => ip = weight_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
                     Some("round-trip") => println!("rr"),
                     Some("geo") => println!("geo"),
                     _ => println!("Tipo de registro no soportado."),
@@ -148,11 +150,19 @@ fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Vec<u8> {
     buffer_respuesta
 }
 
+// Hay que filtrar las que no son healthy
 fn single_ip(ips: &[serde_json::Value]) -> String {
-    ips[0]["ip"].as_str().unwrap().to_string()
+    ips[0]["ip"].as_str().expect("Error convirtiendo single ip").to_string()
 }
 
 fn multi_ip(ips: &[serde_json::Value], counter: u64) -> String {
     let index = (counter as usize) % ips.len();
-    ips[index]["ip"].as_str().unwrap().to_string()
+    ips[index]["ip"].as_str().expect("Error convirtiendo multi ip").to_string()
+}
+
+fn weight_ip(ips: &[serde_json::Value]) -> String {
+    let weights: Vec<u64> = ips.iter().map(|e| e["weight"].as_u64().expect("No se asignó weight")).collect();
+    let dist = WeightedIndex::new(&weights).expect("Surgió algún error obteniendo los pesos");
+    let mut rng = rand::rng();
+    ips[dist.sample(&mut rng)]["ip"].as_str().expect("Error convirtiendo weight ip").to_string()
 }
