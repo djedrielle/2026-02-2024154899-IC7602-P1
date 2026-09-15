@@ -31,6 +31,7 @@ implementa en el **DNS Interceptor**, usando el documento que devuelve
 | Método | Ruta | Descripción |
 |---|---|---|
 | `GET` | `/api/exists?domain=<d>` | Registro del dominio, o `false` si no existe |
+| `GET` | `/api/ip_country?ip=<ip>` | País/ubicación de una IP, o `false` si no hay rango |
 | `POST` | `/api/dns_resolver` | Reenvía un paquete DNS (BASE64) a un DNS remoto real |
 | `GET` | `/` | Info del servicio y dominios cargados |
 
@@ -97,14 +98,26 @@ curl -k -X POST "https://localhost:8443/api/dns_resolver" \
   -H "Content-Type: application/json" -d "{\"data\":\"$DATA\"}"
 ```
 
-## Nota: IP to Country (pendiente de decisión)
+## IP to Country
 
-Los tipos `geo` y `round-trip` que implementarás en el interceptor necesitan
-mapear la **source IP** del cliente a un país/ubicación. Esa base
-(`IP to Country`) vive en Supabase/Firebase, así que el interceptor tendría que
-consultarla a través del DNS API. El archivo `ip_to_country.json` queda listo,
-pero **no hay endpoint que lo exponga todavía** — falta decidir cómo se accede a
-ese dato (ver conversación).
+Los tipos `geo` y `round-trip` que implementas en el interceptor necesitan mapear
+la **source IP** del cliente a un país/ubicación. El endpoint `/api/ip_country`
+expone ese dato (desde `ip_to_country.json`); el interceptor consulta el país y
+aplica la lógica de selección. Respuesta cuando la IP cae en un rango conocido:
+
+```json
+{
+  "ip": "200.1.2.3",
+  "country_code": "CR",
+  "country_name": "Costa Rica",
+  "city": "San Jose",
+  "latitude": 9.93,
+  "longitude": -84.08
+}
+```
+
+Si ninguna entrada contiene la IP, devuelve `false` (en `geo`, el interceptor
+retorna entonces una IP aleatoria).
 
 ## Nota para el interceptor (Rust)
 

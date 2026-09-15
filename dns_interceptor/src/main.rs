@@ -6,6 +6,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
+use rand::seq::SliceRandom;
 
 fn main() -> Result<(), Box<dyn Error>> {
     {
@@ -32,11 +33,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             let domain = extraer_host(&buffer_solicitud[12..]); // [12..] para saltarnos el header
             
             // consultar a DNS API (GET /api/exists) si existe un registro para este host
-            let url = format!("{}/api/exists?domain={}", dns_api_url, domain);
-            let response = client.get(&url).send()?;
+            let mut url = format!("{}/api/exists?domain={}", dns_api_url, domain);
+            let mut response = client.get(&url).send()?;
             let body: serde_json::Value = response.json()?;
 
             println!("Body: {}", body);
+            println!("IP source: {}", &src.ip());
+
+            // consultar a DNS API (GET /api/exists) el codigo pais del host
+            url = format!("{}/api/ip_country?ip={}", dns_api_url, &src.ip());
+            response = client.get(&url).send()?;
+            let respuesta_ip_country: serde_json::Value = response.json()?;
+
+            println!("Codigo pais: {}", respuesta_ip_country);
 
             if body.as_bool() == Some(false) {
                 // Si no existe registro para este dominio entonces codificar
@@ -53,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Some("multi") => ip = multi_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?, body["counter"].as_u64().ok_or("Este registro no posee campo counter valido.")?),
                     Some("weight") => ip = weight_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
                     Some("round-trip") => println!("rr"),
-                    Some("geo") => println!("geo"),
+                    Some("geo") => ip = geo_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?, &respuesta_ip_country["country_code"].as_str().expect("Error pasando el codigo pais a geo_ip()")).ok_or("Error obteniendo la IP geo")?,
                     _ => println!("Tipo de registro no soportado."),
                 }
                 println!("IP: {}", ip);
@@ -165,4 +174,18 @@ fn weight_ip(ips: &[serde_json::Value]) -> String {
     let dist = WeightedIndex::new(&weights).expect("Surgió algún error obteniendo los pesos");
     let mut rng = rand::rng();
     ips[dist.sample(&mut rng)]["ip"].as_str().expect("Error convirtiendo weight ip").to_string()
+}
+
+fn geo_ip(ips: &[serde_json::Value], codigo_pais : &str) -> Option<String> {
+    let ip = ips.iter()
+        .find(|e| e["country_code"].as_str() == Some(codigo_pais))
+        .and_then(|e| e["ip"].as_str())
+        .map(|e| e.to_string());
+    
+    if ip.is_none() {
+        let mut rng = rand::rng();
+        ips.choose(&mut rng)?["ip"].as_str().map(|e| e.to_string())
+    } else {
+        ip
+    }
 }

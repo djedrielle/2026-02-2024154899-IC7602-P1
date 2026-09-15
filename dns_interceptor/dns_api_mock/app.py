@@ -25,6 +25,7 @@ Config por variables de entorno:
 """
 
 import base64
+import ipaddress
 import json
 import os
 import socket
@@ -48,7 +49,28 @@ def load_records() -> dict:
         return {rec["name"]: rec for rec in json.load(f)}
 
 
+def load_geo() -> list:
+    """Lista de rangos de la 'base' IP to Country."""
+    with open(BASE_DIR / "ip_to_country.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
 RECORDS = load_records()
+GEO_DB = load_geo()
+
+
+def ip_to_int(ip: str) -> int:
+    """IPv4 con puntos -> entero (lanza AddressValueError si es inválida)."""
+    return int(ipaddress.IPv4Address(ip))
+
+
+def geo_lookup(ip: str) -> dict | None:
+    """Devuelve el rango de ip_to_country que contiene la IP, o None."""
+    ip_int = ip_to_int(ip)
+    for entry in GEO_DB:
+        if ip_to_int(entry["start_ip"]) <= ip_int <= ip_to_int(entry["end_ip"]):
+            return entry
+    return None
 
 app = FastAPI(title="DNS API Mock", version="2.0")
 
@@ -65,6 +87,32 @@ def exists(domain: str = Query(..., description="Dominio a verificar")):
     weight / geo la aplica el DNS Interceptor con estos datos.
     """
     return RECORDS.get(domain, False)
+
+
+@app.get("/api/ip_country")
+def ip_country(ip: str = Query(..., description="IP a geolocalizar")):
+    """Devuelve el país/ubicación de una IP según ip_to_country, o `false` si
+    ningún rango la contiene. Solo entrega el dato: la lógica de geo / round-trip
+    la aplica el interceptor.
+    """
+    try:
+        loc = geo_lookup(ip)
+    except ipaddress.AddressValueError:
+        raise HTTPException(status_code=400, detail="invalid IPv4 address")
+
+    if loc is None:
+        return False
+
+    # De momento solo devolvemos el codigo del pais ya que la base de datos IP to Country
+    # solo trae este campo. Hay que desarrollar una estrategia para integrar la latencia y longitud
+    return {
+        #"ip": ip,
+        "country_code": loc["country_code"],
+        #"country_name": loc.get("country_name"),
+        #"city": loc.get("city"),
+        #"latitude": loc.get("latitude"),
+        #"longitude": loc.get("longitude"),
+    }
 
 
 class ResolverRequest(BaseModel):
@@ -99,5 +147,5 @@ def root():
         "service": "DNS API Mock",
         "remote_dns": f"{REMOTE_DNS}:{REMOTE_DNS_PORT}",
         "records": sorted(RECORDS.keys()),
-        "endpoints": ["/api/exists", "/api/dns_resolver"],
+        "endpoints": ["/api/exists", "/api/ip_country", "/api/dns_resolver"],
     }

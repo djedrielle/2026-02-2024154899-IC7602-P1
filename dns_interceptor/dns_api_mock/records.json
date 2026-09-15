@@ -96,6 +96,11 @@
         "ip": "10.0.3.3",
         "country_code": "DE",
         "healthy": true
+      },
+      {
+        "ip": "10.0.3.4",
+        "country_code": "CA",
+        "healthy": true
       }
     ]
   }
