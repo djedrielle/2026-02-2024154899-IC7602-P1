@@ -22,11 +22,19 @@
       },
       {
         "ip": "10.0.0.2",
-        "healthy": true
+        "healthy": false
       },
       {
         "ip": "10.0.0.3",
-        "healthy": true
+        "healthy": false
+      },
+      {
+        "ip": "10.0.0.4",
+        "healthy": false
+      },
+      {
+        "ip": "10.0.0.5",
+        "healthy": false
       }
     ]
   },

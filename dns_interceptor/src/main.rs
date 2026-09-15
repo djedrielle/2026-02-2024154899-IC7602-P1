@@ -35,17 +35,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             // consultar a DNS API (GET /api/exists) si existe un registro para este host
             let mut url = format!("{}/api/exists?domain={}", dns_api_url, domain);
             let mut response = client.get(&url).send()?;
-            let body: serde_json::Value = response.json()?;
+            let mut body: serde_json::Value = response.json()?;
 
             println!("Body: {}", body);
-            println!("IP source: {}", &src.ip());
 
             // consultar a DNS API (GET /api/exists) el codigo pais del host
             url = format!("{}/api/ip_country?ip={}", dns_api_url, &src.ip());
             response = client.get(&url).send()?;
             let respuesta_ip_country: serde_json::Value = response.json()?;
-
-            println!("Codigo pais: {}", respuesta_ip_country);
 
             if body.as_bool() == Some(false) {
                 // Si no existe registro para este dominio entonces codificar
@@ -55,7 +52,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("No hay registro para este host");
                 // enviar via HTTPS a POST /api/dns_resolver
             } else {
-                println!("Hay registro para este host");
+                // Filtrar los unhealthy
+                if let Some(ips) = body["ips"].as_array_mut() {
+                    ips.retain(|e| e["healthy"].as_bool() == Some(true));
+                    if ips.is_empty() {
+                        return Err("No se encontraron IPs saludables para este registro".into());
+                    }
+                }
+                println!("Body filtrado: {}", body);
                 let mut ip = String::new();
                 match body["type"].as_str() {
                     Some("single") => ip = single_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
@@ -153,9 +157,7 @@ fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Vec<u8> {
     let address: Ipv4Addr = ip.parse().expect("IP invalida");
     let octetos = address.octets();
     buffer_respuesta.extend_from_slice(&octetos);
-    
-    println!("buffer_respuesta: {:02x?}", &buffer_respuesta);
-    
+
     buffer_respuesta
 }
 
