@@ -1,5 +1,7 @@
-package main.java.com.tec.dnsapi.dto;
+package com.tec.dnsapi.dto;
 
-public class DnsResolverRequest {
-
-}
+/**
+ * Request recibido en POST /api/dns_resolver.
+ * "data" contiene el paquete DNS crudo (RFC1035) codificado en BASE64.
+ */
+public record DnsResolverRequest(String data) {} // BASE64
