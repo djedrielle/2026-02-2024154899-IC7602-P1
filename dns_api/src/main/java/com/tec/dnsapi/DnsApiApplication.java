@@ -1,7 +1,11 @@
-package main.java.com.tec.dnsapi;
+package com.tec.dnsapi;
 
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
 public class DnsApiApplication {
     public static void main(String[] args) {
-        System.out.println("DnsApiApplication started.");
+        SpringApplication.run(DnsApiApplication.class, args);
     }
 }
