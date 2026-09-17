@@ -3,7 +3,9 @@ server:
 
 dns:
   remote:
-    ip: ${DNS_REMOTE_IP:8.8.8.8}
+    host: ${DNS_REMOTE_HOST:8.8.8.8}
+    port: ${DNS_REMOTE_PORT:53}
+    timeout-ms: ${DNS_REMOTE_TIMEOUT_MS:5000}
 
 spring:
   datasource:
