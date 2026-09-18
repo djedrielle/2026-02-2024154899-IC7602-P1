@@ -1,6 +1,5 @@
 package com.tec.dnsapi.controller;
 
-import com.tec.dnsapi.dto.ExistsResponse;
 import com.tec.dnsapi.service.DnsRecordService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,7 +15,7 @@ public class DnsRecordController {
     }
 
     @GetMapping("/exists")
-    public ResponseEntity<ExistsResponse> exists(@RequestParam String name) {
-        return ResponseEntity.ok(service.findByName(name));
+    public ResponseEntity<Object> exists(@RequestParam String domain) {
+        return ResponseEntity.ok(service.findByDomain(domain));
     }
 }

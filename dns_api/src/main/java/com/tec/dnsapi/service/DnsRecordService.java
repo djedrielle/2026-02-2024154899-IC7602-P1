@@ -1,6 +1,6 @@
 package com.tec.dnsapi.service;
 
-import com.tec.dnsapi.dto.ExistsResponse;
+import com.tec.dnsapi.dto.RecordResponse;
 import com.tec.dnsapi.repository.DnsRecordRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,16 +15,17 @@ public class DnsRecordService {
     }
 
     @Transactional(readOnly = true)
-    public ExistsResponse findByName(String name) {
-        String normalized = normalize(name);
+    public Object findByDomain(String domain) {
+        String normalized = normalize(domain);
         return repository.findById(normalized)
-                .map(r -> new ExistsResponse(true, r.getName(), r.getType(), r.getTtl(), r.getIps()))
-                .orElseGet(() -> ExistsResponse.notFound(normalized));
+                .<Object>map(r -> new RecordResponse(
+                        r.getName(), r.getType(), r.getTtl(), r.getIps()))
+                .orElse(false);
     }
 
-    private String normalize(String name) {
-        if (name == null) return "";
-        String trimmed = name.trim().toLowerCase();
+    private String normalize(String domain) {
+        if (domain == null) return "";
+        String trimmed = domain.trim().toLowerCase();
         return trimmed.endsWith(".") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 }
