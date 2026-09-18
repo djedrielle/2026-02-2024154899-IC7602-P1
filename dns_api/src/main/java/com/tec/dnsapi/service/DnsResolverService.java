@@ -4,6 +4,7 @@ import com.tec.dnsapi.client.DnsRemoteClient;
 import com.tec.dnsapi.dto.DnsResolverRequest;
 import com.tec.dnsapi.dto.DnsResolverResponse;
 import com.tec.dnsapi.exception.DnsResolutionException;
+import com.tec.dnsapi.exception.InvalidDnsPacketException;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,14 +19,34 @@ public class DnsResolverService {
         this.remoteClient = remoteClient;
     }
 
-    public DnsResolverResponse resolve(DnsResolverRequest request) {
+    /**
+     * Valida y decodifica el paquete BASE64. Se ejecuta de forma sincrona
+     * antes de delegar al pool: es una operacion instantanea y, si falla,
+     * evita ocupar un hilo del executor.
+     */
+    public byte[] decodeAndValidate(DnsResolverRequest request) {
+        if (request == null || request.data() == null || request.data().isBlank()) {
+            throw new InvalidDnsPacketException(
+                    "El campo 'data' es obligatorio y no puede estar vacio");
+        }
         try {
-            byte[] rawPacket = Base64.getDecoder().decode(request.data());
+            return Base64.getDecoder().decode(request.data());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidDnsPacketException("El campo 'data' no es BASE64 valido", e);
+        }
+    }
+
+    /**
+     * Envia el paquete ya decodificado al DNS remoto por UDP y devuelve
+     * la respuesta codificada en BASE64. Operacion bloqueante de I/O.
+     */
+    public DnsResolverResponse resolveDecoded(byte[] rawPacket) {
+        try {
             byte[] rawResponse = remoteClient.resolve(rawPacket);
-            String encoded = Base64.getEncoder().encodeToString(rawResponse);
-            return new DnsResolverResponse(encoded);
+            return new DnsResolverResponse(
+                    Base64.getEncoder().encodeToString(rawResponse));
         } catch (IOException e) {
-            throw new DnsResolutionException("Fallo al resolver contra DNS remoto", e);
+            throw new DnsResolutionException("Fallo al resolver contra el DNS remoto", e);
         }
     }
 }
