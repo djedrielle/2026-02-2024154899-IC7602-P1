@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "./page.module.css";
 
 const recordTypes = ["single", "multi", "weight", "round-trip", "geo"];
+const apiBaseUrl = process.env.NEXT_PUBLIC_DNS_API_URL?.replace(/\/$/, "");
 
 function emptyTarget(type) {
   if (type === "weight") return { ip: "", weight: "" };
@@ -31,6 +32,20 @@ function emptyRecord() {
   };
 }
 
+function recordFromApi(record) {
+  return {
+    domain: record.name,
+    type: record.type,
+    ttl: record.ttl,
+    targets: record.ips.map((target) =>
+      record.type === "geo"
+        ? { ...target, country: target.country_code }
+        : { ...target },
+    ),
+    healthCheck: emptyHealthCheck(),
+  };
+}
+
 function describeTargets(record) {
   if (record.type === "weight") {
     return record.targets
@@ -48,6 +63,8 @@ function describeTargets(record) {
 export default function Home() {
   const [section, setSection] = useState("records");
   const [records, setRecords] = useState([]);
+  const [recordsLoading, setRecordsLoading] = useState(true);
+  const [recordsError, setRecordsError] = useState("");
   const [countryRecords, setCountryRecords] = useState([]);
   const [recordPanel, setRecordPanel] = useState(null);
   const [countryPanel, setCountryPanel] = useState(null);
@@ -56,6 +73,46 @@ export default function Home() {
 
   const isEditingRecord = recordPanel?.mode === "edit";
   const isEditingCountry = countryPanel?.mode === "edit";
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadRecords() {
+      if (!apiBaseUrl) {
+        if (isCurrent) {
+          setRecordsError("Configura NEXT_PUBLIC_DNS_API_URL para cargar los registros.");
+          setRecordsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/records`);
+        if (!response.ok) {
+          throw new Error("No se pudieron obtener los registros.");
+        }
+
+        const data = await response.json();
+        if (isCurrent) {
+          setRecords(data.map(recordFromApi));
+        }
+      } catch {
+        if (isCurrent) {
+          setRecordsError("No se pudieron cargar los registros DNS.");
+        }
+      } finally {
+        if (isCurrent) {
+          setRecordsLoading(false);
+        }
+      }
+    }
+
+    loadRecords();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   function openNewRecord() {
     setRecordForm(emptyRecord());
@@ -350,7 +407,16 @@ export default function Home() {
                 + Crear registro
               </button>
             </div>
-            {records.length === 0 ? (
+            {recordsLoading ? (
+              <div className={styles.emptyState}>
+                <h2>Cargando registros DNS</h2>
+              </div>
+            ) : recordsError ? (
+              <div className={styles.emptyState}>
+                <h2>No se pudieron cargar los registros DNS</h2>
+                <p>{recordsError}</p>
+              </div>
+            ) : records.length === 0 ? (
               <div className={styles.emptyState}>
                 <h2>No hay registros DNS</h2>
                 <p>Crea un registro para comenzar.</p>
@@ -362,6 +428,7 @@ export default function Home() {
                     <tr>
                       <th>Nombre del dominio</th>
                       <th>Tipo</th>
+                      <th>TTL</th>
                       <th>Configuración</th>
                       <th>Acciones</th>
                     </tr>
@@ -371,6 +438,7 @@ export default function Home() {
                       <tr key={`${record.domain}-${index}`}>
                         <td className={styles.mono}>{record.domain}</td>
                         <td><span className={styles.badge}>{record.type}</span></td>
+                        <td>{record.ttl}</td>
                         <td className={styles.mono}>{describeTargets(record)}</td>
                         <td className={styles.actions}>
                           <button onClick={() => openEditRecord(index)} type="button">Editar</button>
