@@ -7,9 +7,12 @@ const recordTypes = ["single", "multi", "weight", "round-trip", "geo"];
 const apiBaseUrl = process.env.NEXT_PUBLIC_DNS_API_URL?.replace(/\/$/, "");
 
 function emptyTarget(type) {
-  if (type === "weight") return { ip: "", weight: "" };
-  if (type === "geo") return { country: "", ip: "" };
-  return { ip: "" };
+  if (type === "weight") return { ip: "", weight: "", healthy: true };
+  if (type === "round-trip") {
+    return { ip: "", latitude: "", longitude: "", healthy: true };
+  }
+  if (type === "geo") return { country: "", ip: "", healthy: true };
+  return { ip: "", healthy: true };
 }
 
 function emptyHealthCheck() {
@@ -27,6 +30,7 @@ function emptyRecord() {
   return {
     domain: "",
     type: "single",
+    ttl: "",
     targets: [emptyTarget("single")],
     healthCheck: emptyHealthCheck(),
   };
@@ -37,12 +41,40 @@ function recordFromApi(record) {
     domain: record.name,
     type: record.type,
     ttl: record.ttl,
-    targets: record.ips.map((target) =>
-      record.type === "geo"
-        ? { ...target, country: target.country_code }
-        : { ...target },
-    ),
+    targets: record.ips.map((target) => {
+      if (record.type === "geo") {
+        const { country_code, ...targetData } = target;
+        return { ...targetData, country: country_code };
+      }
+      return { ...target };
+    }),
     healthCheck: emptyHealthCheck(),
+  };
+}
+
+function recordToApi(record) {
+  return {
+    name: record.domain,
+    type: record.type,
+    ttl: Number(record.ttl),
+    ips: record.targets.map((target) => {
+      const { country, ...targetData } = target;
+
+      if (record.type === "weight") {
+        return { ...targetData, weight: Number(targetData.weight) };
+      }
+      if (record.type === "round-trip") {
+        return {
+          ...targetData,
+          latitude: Number(targetData.latitude),
+          longitude: Number(targetData.longitude),
+        };
+      }
+      if (record.type === "geo") {
+        return { ...targetData, country_code: country };
+      }
+      return targetData;
+    }),
   };
 }
 
@@ -57,6 +89,11 @@ function describeTargets(record) {
       .map((target) => `${target.country}: ${target.ip}`)
       .join(", ");
   }
+  if (record.type === "round-trip") {
+    return record.targets
+      .map((target) => `${target.ip} (${target.latitude}, ${target.longitude})`)
+      .join(", ");
+  }
   return record.targets.map((target) => target.ip).join(", ");
 }
 
@@ -65,6 +102,8 @@ export default function Home() {
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
   const [recordsError, setRecordsError] = useState("");
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [recordSaveError, setRecordSaveError] = useState("");
   const [countryRecords, setCountryRecords] = useState([]);
   const [recordPanel, setRecordPanel] = useState(null);
   const [countryPanel, setCountryPanel] = useState(null);
@@ -116,6 +155,7 @@ export default function Home() {
 
   function openNewRecord() {
     setRecordForm(emptyRecord());
+    setRecordSaveError("");
     setRecordPanel({ mode: "create" });
   }
 
@@ -126,10 +166,11 @@ export default function Home() {
       targets: record.targets.map((target) => ({ ...target })),
       healthCheck: { ...record.healthCheck },
     });
+    setRecordSaveError("");
     setRecordPanel({ mode: "edit", index });
   }
 
-  function saveRecord(event) {
+  async function saveRecord(event) {
     event.preventDefault();
     if (isEditingRecord) {
       setRecords((currentRecords) =>
@@ -137,10 +178,35 @@ export default function Home() {
           index === recordPanel.index ? recordForm : record,
         ),
       );
-    } else {
-      setRecords((currentRecords) => [...currentRecords, recordForm]);
+      setRecordPanel(null);
+      return;
     }
-    setRecordPanel(null);
+
+    if (!apiBaseUrl) {
+      setRecordSaveError("Configura NEXT_PUBLIC_DNS_API_URL para guardar el registro.");
+      return;
+    }
+
+    setRecordSaving(true);
+    setRecordSaveError("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/records`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(recordToApi(recordForm)),
+      });
+      if (!response.ok) {
+        throw new Error("No se pudo crear el registro.");
+      }
+
+      const createdRecord = await response.json();
+      setRecords((currentRecords) => [...currentRecords, recordFromApi(createdRecord)]);
+      setRecordPanel(null);
+    } catch {
+      setRecordSaveError("No se pudo guardar el registro DNS.");
+    } finally {
+      setRecordSaving(false);
+    }
   }
 
   function deleteRecord(index) {
@@ -246,7 +312,7 @@ export default function Home() {
             <div className={styles.targetRow} key={index}>
               {type === "geo" && (
                 <label>
-                  País
+                  Código de país
                   <input
                     onChange={(event) => updateTarget(index, "country", event.target.value)}
                     required
@@ -262,6 +328,30 @@ export default function Home() {
                   value={target.ip}
                 />
               </label>
+              {type === "round-trip" && (
+                <>
+                  <label>
+                    Latitud
+                    <input
+                      onChange={(event) => updateTarget(index, "latitude", event.target.value)}
+                      required
+                      step="any"
+                      type="number"
+                      value={target.latitude}
+                    />
+                  </label>
+                  <label>
+                    Longitud
+                    <input
+                      onChange={(event) => updateTarget(index, "longitude", event.target.value)}
+                      required
+                      step="any"
+                      type="number"
+                      value={target.longitude}
+                    />
+                  </label>
+                </>
+              )}
               {type === "weight" && (
                 <label>
                   Peso
@@ -512,6 +602,16 @@ export default function Home() {
                   value={recordForm.domain}
                 />
               </label>
+              <label>
+                TTL (segundos)
+                <input
+                  min="0"
+                  onChange={(event) => setRecordForm((currentRecord) => ({ ...currentRecord, ttl: event.target.value }))}
+                  required
+                  type="number"
+                  value={recordForm.ttl}
+                />
+              </label>
               <fieldset className={styles.typeSelector}>
                 <legend>Tipo de registro</legend>
                 <div>
@@ -529,11 +629,12 @@ export default function Home() {
               </fieldset>
               {renderTargetFields()}
               {renderHealthCheckFields()}
+              {recordSaveError && <p role="alert">{recordSaveError}</p>}
             </div>
             <div className={styles.drawerFooter}>
               <button className={styles.secondaryButton} onClick={() => setRecordPanel(null)} type="button">Cancelar</button>
-              <button className={styles.primaryButton} type="submit">
-                {isEditingRecord ? "Guardar cambios" : "Guardar registro"}
+              <button className={styles.primaryButton} disabled={recordSaving} type="submit">
+                {recordSaving ? "Guardando..." : isEditingRecord ? "Guardar cambios" : "Guardar registro"}
               </button>
             </div>
           </form>
