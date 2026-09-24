@@ -104,6 +104,8 @@ export default function Home() {
   const [recordsError, setRecordsError] = useState("");
   const [recordSaving, setRecordSaving] = useState(false);
   const [recordSaveError, setRecordSaveError] = useState("");
+  const [recordActionError, setRecordActionError] = useState("");
+  const [deletingRecord, setDeletingRecord] = useState("");
   const [countryRecords, setCountryRecords] = useState([]);
   const [recordPanel, setRecordPanel] = useState(null);
   const [countryPanel, setCountryPanel] = useState(null);
@@ -156,6 +158,7 @@ export default function Home() {
   function openNewRecord() {
     setRecordForm(emptyRecord());
     setRecordSaveError("");
+    setRecordActionError("");
     setRecordPanel({ mode: "create" });
   }
 
@@ -167,21 +170,12 @@ export default function Home() {
       healthCheck: { ...record.healthCheck },
     });
     setRecordSaveError("");
-    setRecordPanel({ mode: "edit", index });
+    setRecordActionError("");
+    setRecordPanel({ mode: "edit", index, currentName: record.domain });
   }
 
   async function saveRecord(event) {
     event.preventDefault();
-    if (isEditingRecord) {
-      setRecords((currentRecords) =>
-        currentRecords.map((record, index) =>
-          index === recordPanel.index ? recordForm : record,
-        ),
-      );
-      setRecordPanel(null);
-      return;
-    }
-
     if (!apiBaseUrl) {
       setRecordSaveError("Configura NEXT_PUBLIC_DNS_API_URL para guardar el registro.");
       return;
@@ -190,8 +184,11 @@ export default function Home() {
     setRecordSaving(true);
     setRecordSaveError("");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/records`, {
-        method: "POST",
+      const path = isEditingRecord
+        ? `/api/records/${encodeURIComponent(recordPanel.currentName)}`
+        : "/api/records";
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        method: isEditingRecord ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(recordToApi(recordForm)),
       });
@@ -199,8 +196,14 @@ export default function Home() {
         throw new Error("No se pudo crear el registro.");
       }
 
-      const createdRecord = await response.json();
-      setRecords((currentRecords) => [...currentRecords, recordFromApi(createdRecord)]);
+      const savedRecord = await response.json();
+      setRecords((currentRecords) =>
+        isEditingRecord
+          ? currentRecords.map((record, index) =>
+            index === recordPanel.index ? recordFromApi(savedRecord) : record,
+          )
+          : [...currentRecords, recordFromApi(savedRecord)],
+      );
       setRecordPanel(null);
     } catch {
       setRecordSaveError("No se pudo guardar el registro DNS.");
@@ -209,10 +212,32 @@ export default function Home() {
     }
   }
 
-  function deleteRecord(index) {
-    setRecords((currentRecords) =>
-      currentRecords.filter((_, recordIndex) => recordIndex !== index),
-    );
+  async function deleteRecord(index) {
+    const record = records[index];
+    if (!apiBaseUrl) {
+      setRecordActionError("Configura NEXT_PUBLIC_DNS_API_URL para eliminar el registro.");
+      return;
+    }
+
+    setDeletingRecord(record.domain);
+    setRecordActionError("");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/records/${encodeURIComponent(record.domain)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        throw new Error("No se pudo eliminar el registro.");
+      }
+
+      setRecords((currentRecords) =>
+        currentRecords.filter((_, recordIndex) => recordIndex !== index),
+      );
+    } catch {
+      setRecordActionError("No se pudo eliminar el registro DNS.");
+    } finally {
+      setDeletingRecord("");
+    }
   }
 
   function changeRecordType(type) {
@@ -497,6 +522,7 @@ export default function Home() {
                 + Crear registro
               </button>
             </div>
+            {recordActionError && <p role="alert">{recordActionError}</p>}
             {recordsLoading ? (
               <div className={styles.emptyState}>
                 <h2>Cargando registros DNS</h2>
@@ -532,7 +558,13 @@ export default function Home() {
                         <td className={styles.mono}>{describeTargets(record)}</td>
                         <td className={styles.actions}>
                           <button onClick={() => openEditRecord(index)} type="button">Editar</button>
-                          <button onClick={() => deleteRecord(index)} type="button">Eliminar</button>
+                          <button
+                            disabled={deletingRecord === record.domain}
+                            onClick={() => deleteRecord(index)}
+                            type="button"
+                          >
+                            {deletingRecord === record.domain ? "Eliminando..." : "Eliminar"}
+                          </button>
                         </td>
                       </tr>
                     ))}
