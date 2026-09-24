@@ -36,6 +36,18 @@ function emptyRecord() {
   };
 }
 
+function emptyCountryRecord() {
+  return {
+    start_ip: "",
+    end_ip: "",
+    country_code: "",
+    country_name: "",
+    city: "",
+    latitude: "",
+    longitude: "",
+  };
+}
+
 function recordFromApi(record) {
   return {
     domain: record.name,
@@ -110,7 +122,7 @@ export default function Home() {
   const [recordPanel, setRecordPanel] = useState(null);
   const [countryPanel, setCountryPanel] = useState(null);
   const [recordForm, setRecordForm] = useState(emptyRecord);
-  const [countryForm, setCountryForm] = useState({ ip: "", country: "" });
+  const [countryForm, setCountryForm] = useState(emptyCountryRecord);
 
   const isEditingRecord = recordPanel?.mode === "edit";
   const isEditingCountry = countryPanel?.mode === "edit";
@@ -281,7 +293,7 @@ export default function Home() {
   }
 
   function openNewCountryRecord() {
-    setCountryForm({ ip: "", country: "" });
+    setCountryForm(emptyCountryRecord());
     setCountryPanel({ mode: "create" });
   }
 
@@ -587,23 +599,27 @@ export default function Home() {
             {countryRecords.length === 0 ? (
               <div className={styles.emptyState}>
                 <h2>No hay registros IP to Country</h2>
-                <p>Agrega una dirección IP y su país asociado.</p>
+                <p>Agrega un rango de IP y su ubicación asociada.</p>
               </div>
             ) : (
               <div className={styles.tableWrap}>
                 <table>
                   <thead>
                     <tr>
-                      <th>IP</th>
+                      <th>Rango IP</th>
                       <th>País</th>
+                      <th>Ciudad</th>
+                      <th>Coordenadas</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {countryRecords.map((record, index) => (
-                      <tr key={`${record.ip}-${index}`}>
-                        <td className={styles.mono}>{record.ip}</td>
-                        <td>{record.country}</td>
+                      <tr key={`${record.start_ip}-${record.end_ip}-${index}`}>
+                        <td className={styles.mono}>{record.start_ip} — {record.end_ip}</td>
+                        <td>{record.country_code}{record.country_name ? ` · ${record.country_name}` : ""}</td>
+                        <td>{record.city || "—"}</td>
+                        <td>{record.latitude !== "" && record.longitude !== "" ? `${record.latitude}, ${record.longitude}` : "—"}</td>
                         <td className={styles.actions}>
                           <button onClick={() => openEditCountryRecord(index)} type="button">Editar</button>
                           <button onClick={() => deleteCountryRecord(index)} type="button">Eliminar</button>
@@ -682,21 +698,67 @@ export default function Home() {
             </div>
             <div className={styles.drawerBody}>
               <label>
-                IP
+                IP inicial
                 <input
-                  onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, ip: event.target.value }))}
+                  onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, start_ip: event.target.value }))}
                   required
-                  value={countryForm.ip}
+                  value={countryForm.start_ip}
                 />
               </label>
               <label>
-                País
+                IP final
                 <input
-                  onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, country: event.target.value }))}
+                  onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, end_ip: event.target.value }))}
                   required
-                  value={countryForm.country}
+                  value={countryForm.end_ip}
                 />
               </label>
+              <div className={styles.healthGrid}>
+                <label>
+                  Código de país
+                  <input
+                    maxLength="2"
+                    minLength="2"
+                    onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, country_code: event.target.value }))}
+                    required
+                    value={countryForm.country_code}
+                  />
+                </label>
+                <label>
+                  Nombre de país
+                  <input
+                    onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, country_name: event.target.value }))}
+                    value={countryForm.country_name}
+                  />
+                </label>
+                <label>
+                  Ciudad
+                  <input
+                    onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, city: event.target.value }))}
+                    value={countryForm.city}
+                  />
+                </label>
+              </div>
+              <div className={styles.healthGrid}>
+                <label>
+                  Latitud
+                  <input
+                    onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, latitude: event.target.value }))}
+                    step="any"
+                    type="number"
+                    value={countryForm.latitude}
+                  />
+                </label>
+                <label>
+                  Longitud
+                  <input
+                    onChange={(event) => setCountryForm((currentRecord) => ({ ...currentRecord, longitude: event.target.value }))}
+                    step="any"
+                    type="number"
+                    value={countryForm.longitude}
+                  />
+                </label>
+              </div>
             </div>
             <div className={styles.drawerFooter}>
               <button className={styles.secondaryButton} onClick={() => setCountryPanel(null)} type="button">Cancelar</button>
