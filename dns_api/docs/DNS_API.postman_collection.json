@@ -1,0 +1,359 @@
+{
+  "info": {
+    "name": "DNS API — IC7602 Redes",
+    "description": "Colección completa del DNS API (Spring Boot). Cubre los endpoints usados por el DNS Interceptor y el CRUD de la DNS UI.\n\n**Variables:**\n- `base_url` — URL base del servicio (default: http://localhost:8080)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "DNS Interceptor",
+      "description": "Endpoints consumidos por el DNS Interceptor (Rust). No aplican estrategias de resolución — solo entregan datos de Supabase.",
+      "item": [
+        {
+          "name": "GET /api/exists — dominio encontrado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/exists?domain=example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "exists"],
+              "query": [{ "key": "domain", "value": "example.com" }]
+            },
+            "description": "Devuelve el registro completo si el dominio existe en Supabase."
+          },
+          "response": [
+            {
+              "name": "200 — Registro encontrado",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"example.com\",\n  \"type\": \"single\",\n  \"ttl\": 300,\n  \"ips\": [\n    { \"ip\": \"93.184.216.34\", \"healthy\": true }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/exists — dominio no encontrado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/exists?domain=noexiste.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "exists"],
+              "query": [{ "key": "domain", "value": "noexiste.com" }]
+            },
+            "description": "Devuelve false (literal JSON) cuando el dominio no existe."
+          },
+          "response": [
+            {
+              "name": "200 — No encontrado",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "false"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/ip_country — IP encontrada",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country?ip=190.10.10.1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ip_country"],
+              "query": [{ "key": "ip", "value": "190.10.10.1" }]
+            },
+            "description": "Devuelve el country_code de la IP según la tabla ip_to_country."
+          },
+          "response": [
+            {
+              "name": "200 — IP en rango CR",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"country_code\": \"CR\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/ip_country — IP no encontrada",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country?ip=1.2.3.4",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ip_country"],
+              "query": [{ "key": "ip", "value": "1.2.3.4" }]
+            },
+            "description": "Devuelve false cuando la IP no está en ningún rango registrado."
+          },
+          "response": [
+            {
+              "name": "200 — No encontrada",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "false"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/dns_resolver — reenvío a DNS remoto",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"AAABAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/dns_resolver",
+              "host": ["{{base_url}}"],
+              "path": ["api", "dns_resolver"]
+            },
+            "description": "Recibe un paquete DNS crudo codificado en BASE64, lo reenvía al servidor DNS remoto (8.8.8.8 por defecto) y devuelve la respuesta también en BASE64.\n\nEl body de ejemplo es una consulta DNS para `www.example.com` tipo A."
+          },
+          "response": [
+            {
+              "name": "200 — Respuesta del DNS remoto",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"data\": \"<BASE64 de la respuesta DNS>\"\n}"
+            },
+            {
+              "name": "400 — data ausente o no es BASE64",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"El campo 'data' es obligatorio y no puede estar vacio\"\n}"
+            },
+            {
+              "name": "502 — DNS remoto no responde",
+              "status": "Bad Gateway",
+              "code": 502,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Fallo al resolver contra el DNS remoto\"\n}"
+            },
+            {
+              "name": "503 — Servidor saturado",
+              "status": "Service Unavailable",
+              "code": 503,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Servidor saturado, intente de nuevo\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DNS UI — CRUD Registros",
+      "description": "Endpoints CRUD sobre la tabla `records`. Usados por la DNS UI (Next.js) para gestionar los registros DNS.",
+      "item": [
+        {
+          "name": "GET /api/records — listar todos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            },
+            "description": "Devuelve todos los registros DNS de la base de datos."
+          },
+          "response": [
+            {
+              "name": "200 — Lista de registros",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"name\": \"example.com\",\n    \"type\": \"single\",\n    \"ttl\": 300,\n    \"ips\": [\n      { \"ip\": \"93.184.216.34\", \"healthy\": true }\n    ]\n  },\n  {\n    \"name\": \"balanceado.com\",\n    \"type\": \"weight\",\n    \"ttl\": 60,\n    \"ips\": [\n      { \"ip\": \"10.0.1.1\", \"weight\": 70, \"healthy\": true },\n      { \"ip\": \"10.0.1.2\", \"weight\": 30, \"healthy\": true }\n    ]\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/records — crear (single)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"nuevo.example.com\",\n  \"type\": \"single\",\n  \"ttl\": 300,\n  \"ips\": [\n    { \"ip\": \"1.2.3.4\", \"healthy\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            },
+            "description": "Crea un registro de tipo `single`. Devuelve 201 con el registro guardado."
+          },
+          "response": [
+            {
+              "name": "201 — Registro creado",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"nuevo.example.com\",\n  \"type\": \"single\",\n  \"ttl\": 300,\n  \"ips\": [\n    { \"ip\": \"1.2.3.4\", \"healthy\": true }\n  ]\n}"
+            },
+            {
+              "name": "409 — Dominio ya existe",
+              "status": "Conflict",
+              "code": 409,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Ya existe un registro con el dominio: nuevo.example.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/records — crear (multi)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"multi.example.com\",\n  \"type\": \"multi\",\n  \"ttl\": 60,\n  \"ips\": [\n    { \"ip\": \"10.0.0.1\", \"healthy\": true },\n    { \"ip\": \"10.0.0.2\", \"healthy\": true },\n    { \"ip\": \"10.0.0.3\", \"healthy\": false }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/records — crear (weight)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"weight.example.com\",\n  \"type\": \"weight\",\n  \"ttl\": 120,\n  \"ips\": [\n    { \"ip\": \"10.0.1.1\", \"weight\": 70, \"healthy\": true },\n    { \"ip\": \"10.0.1.2\", \"weight\": 20, \"healthy\": true },\n    { \"ip\": \"10.0.1.3\", \"weight\": 10, \"healthy\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/records — crear (geo)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"geo.example.com\",\n  \"type\": \"geo\",\n  \"ttl\": 300,\n  \"ips\": [\n    { \"ip\": \"10.0.3.1\", \"country_code\": \"CR\", \"healthy\": true },\n    { \"ip\": \"10.0.3.2\", \"country_code\": \"US\", \"healthy\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/records — crear (round-trip)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"rt.example.com\",\n  \"type\": \"round-trip\",\n  \"ttl\": 60,\n  \"ips\": [\n    { \"ip\": \"10.0.2.1\", \"latitude\": 9.93, \"longitude\": -84.08, \"healthy\": true },\n    { \"ip\": \"10.0.2.2\", \"latitude\": 40.71, \"longitude\": -74.01, \"healthy\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/records/{name} — actualizar",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"nuevo.example.com\",\n  \"type\": \"multi\",\n  \"ttl\": 120,\n  \"ips\": [\n    { \"ip\": \"1.2.3.4\", \"healthy\": true },\n    { \"ip\": \"5.6.7.8\", \"healthy\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/records/nuevo.example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records", "nuevo.example.com"]
+            },
+            "description": "Actualiza type, ttl e ips de un registro existente. El name (PK) es inmutable."
+          },
+          "response": [
+            {
+              "name": "200 — Registro actualizado",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"nuevo.example.com\",\n  \"type\": \"multi\",\n  \"ttl\": 120,\n  \"ips\": [\n    { \"ip\": \"1.2.3.4\", \"healthy\": true },\n    { \"ip\": \"5.6.7.8\", \"healthy\": true }\n  ]\n}"
+            },
+            {
+              "name": "404 — Registro no encontrado",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"No existe un registro con el dominio: nuevo.example.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/records/{name} — eliminar",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/records/nuevo.example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "records", "nuevo.example.com"]
+            },
+            "description": "Elimina un registro DNS. Devuelve 204 sin cuerpo si tiene éxito."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminado correctamente",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            },
+            {
+              "name": "404 — Registro no encontrado",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"No existe un registro con el dominio: nuevo.example.com\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
