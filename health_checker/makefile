@@ -1,18 +1,15 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -O2 $(shell pkg-config --cflags libcurl)
-LDFLAGS = $(shell pkg-config --libs libcurl) -lpthread
-SRC     = src/main.c src/config.c src/supabase.c src/checks.c src/cJSON.c
-BIN     = health-checker
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -I/usr/include/postgresql
+LIBS = -lcurl -lpthread -lpq
 
-.PHONY: all clean run
+SRC = src/main.c src/checkers.c src/db_client.c
+OUT = bin/health-checker
 
-all: $(BIN)
+all: build
 
-$(BIN): $(SRC)
-	$(CC) $(CFLAGS) -o $(BIN) $(SRC) $(LDFLAGS)
-
-run: $(BIN)
-	./$(BIN)
+build:
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(SRC) -o $(OUT) $(LIBS)
 
 clean:
-	rm -f $(BIN)
+	rm -rf bin
