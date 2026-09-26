@@ -28,6 +28,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let QR: bool = ((buffer_solicitud[2] >> 7) & 1) == 1; // Extraer QR (Booleano)
         let op_code: u8 = (buffer_solicitud[2] >> 3) & 0b0000_1111; // Extraer op_code (Numero entero en binario)
 
+        let mut ip = String::new();
+
         if !QR && op_code == 0 {
             // identificar el host que se esta tratando de resolver
             let domain = extraer_host(&buffer_solicitud[12..]); // [12..] para saltarnos el header
@@ -60,7 +62,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
                 println!("Body filtrado: {}", body);
-                let mut ip = String::new();
                 match body["type"].as_str() {
                     Some("single") => ip = single_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?),
                     Some("multi") => ip = multi_ip(body["ips"].as_array().ok_or("Este registro no posee campo ips valido.")?, body["counter"].as_u64().ok_or("Este registro no posee campo counter valido.")?),
@@ -75,9 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("No estandar query");
         }
 
-        //let buffer_respuesta = construir_respuesta(&buffer_solicitud, "93.184.216.34");
+        let buffer_respuesta = construir_respuesta(&buffer_solicitud, &ip);
         
-        //socket.send_to(&buffer_respuesta, &src);
+        socket.send_to(&buffer_respuesta, &src);
         
     } // the socket is closed here
     Ok(())
