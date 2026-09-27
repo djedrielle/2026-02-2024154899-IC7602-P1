@@ -2,6 +2,8 @@ use std::net::UdpSocket;
 use std::net::Ipv4Addr;
 use std::env;
 use std::error::Error;
+use std::sync::Arc;
+use std::thread;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use rand::distr::weighted::WeightedIndex;
@@ -9,7 +11,7 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let socket = UdpSocket::bind("0.0.0.0:53")?;
+    let socket = Arc::new(UdpSocket::bind("0.0.0.0:53")?);
     
     // Cliente HTTPS
     let client = reqwest::blocking::Client::builder()
@@ -17,152 +19,154 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build()?;
     
     // Obtener la URL del DNS API
-    let dns_api_url = env::var("DNS_API_URL").unwrap_or_else(|_| "https://host.docker.internal:8443".to_string());
+    let dns_api_url = env::var("DNS_API_URL").unwrap_or_else(|_| "http://host.docker.internal:8080".to_string());
 
     // %%%%% Loop para recibir las solicitudes
     loop {
-        let mut buffer_solicitud = [0; 512]; // Buffer para recibir la solicitud del cliente
+        let mut buffer_solicitud = [0u8; 512]; // Buffer para recibir la solicitud del cliente
         let (amt, src) = match socket.recv_from(&mut buffer_solicitud) { // Esperar la solicitud y guardarla en el buffer
             Ok(v) => v,
             Err(e) => { eprintln!("Error en recv_from: {e}"); continue; }
         };
 
-        // Extraer valores de la solicitud enviada por el cliente
-        // let id = u16::from_be_bytes([buffer_solicitud[0],buffer_solicitud[1]]); // Extraer id (mas adelante hay que incluirlo en la respuesta)
-        let QR: bool = ((buffer_solicitud[2] >> 7) & 1) == 1; // Extraer QR (Booleano)
-        let op_code: u8 = (buffer_solicitud[2] >> 3) & 0b0000_1111; // Extraer op_code (Numero entero en binario)
+        let datos = buffer_solicitud[..amt].to_vec();
 
-        let mut ip = String::new();
+        // Clonar los handles compartidos para este hilo
+        let socket = Arc::clone(&socket);
+        let client = client.clone();
+        let dns_api_url = dns_api_url.clone();
 
-        if !QR && op_code == 0 {
-            // identificar el host que se esta tratando de resolver
-            let domain = extraer_host(&buffer_solicitud[12..]); // [12..] para saltarnos el header
-            
-            // consultar a DNS API (GET /api/exists) si existe un registro para este host
-            let mut url = format!("{}/api/exists?domain={}", dns_api_url, domain);
-            let mut response = match client.get(&url).send() {
-                Ok(r) => r,
-                Err(e) => { eprintln!("Error consultando /api/exists: {e}"); continue; }
-            };
-            let mut body: serde_json::Value = match response.json() {
-                Ok(b) => b,
-                Err(e) => { eprintln!("Error parseando respuesta de /api/exists: {e}"); continue; }
-            };
+        thread::spawn(move || {
+            // Extraer valores de la solicitud enviada por el cliente
+            // let id = u16::from_be_bytes([datos[0],datos[1]]); // Extraer id (mas adelante hay que incluirlo en la respuesta)
+            let QR: bool = ((datos[2] >> 7) & 1) == 1; // Extraer QR (Booleano)
+            let op_code: u8 = (datos[2] >> 3) & 0b0000_1111; // Extraer op_code (Numero entero en binario)
 
-            println!("Body: {}", body);
+            let mut ip = String::new();
 
-            println!("IP origen: {}", &src.ip());
-
-            // consultar a DNS API (GET /api/exists) el codigo pais del host
-            url = format!("{}/api/ip_country?ip={}", dns_api_url, &src.ip());
-            response = match client.get(&url).send() {
-                Ok(r) => r,
-                Err(e) => { eprintln!("Error consultando /api/ip_country: {e}"); continue; }
-            };
-            let respuesta_ip_country: serde_json::Value = match response.json() {
-                Ok(b) => b,
-                Err(e) => { eprintln!("Error parseando respuesta de /api/ip_country: {e}"); continue; }
-            };
-
-            println!("Respuesta IP to Country: {}", respuesta_ip_country);
-
-            if body.as_bool() == Some(false) {
-                // Si no existe registro para este dominio entonces codificar
-                // la solicitud y enviarla a POST /api/dns_resolver via HTTPS
-                let codificado = codificar_base64(&buffer_solicitud[..amt]);
-
-                println!("No hay registro para este host");
+            if !QR && op_code == 0 {
+                // identificar el host que se esta tratando de resolver
+                let domain = extraer_host(&datos[12..]); // [12..] para saltarnos el header
                 
-                // Resolver dominio
-                let resp = match client.post(format!("{}/api/dns_resolver", dns_api_url))
-                    .json(&serde_json::json!({ "data": codificado }))
-                    .send() {
-                        Ok(r) => r,
-                        Err(e) => { eprintln!("Error en /api/dns_resolver: {e}"); continue; }
+                // consultar a DNS API (GET /api/exists) si existe un registro para este host
+                let mut url = format!("{}/api/exists?domain={}", dns_api_url, domain);
+                let mut response = match client.get(&url).send() {
+                    Ok(r) => r,
+                    Err(e) => { eprintln!("Error consultando /api/exists: {e}"); return; }
+                };
+                let mut body: serde_json::Value = match response.json() {
+                    Ok(b) => b,
+                    Err(e) => { eprintln!("Error parseando respuesta de /api/exists: {e}"); return; }
+                };
+
+                // consultar a DNS API (GET /api/exists) el codigo pais del host
+                url = format!("{}/api/ip_country?ip={}", dns_api_url, &src.ip());
+                response = match client.get(&url).send() {
+                    Ok(r) => r,
+                    Err(e) => { eprintln!("Error consultando /api/ip_country: {e}"); return; }
+                };
+                let respuesta_ip_country: serde_json::Value = match response.json() {
+                    Ok(b) => b,
+                    Err(e) => { eprintln!("Error parseando respuesta de /api/ip_country: {e}"); return; }
+                };
+
+                if body.as_bool() == Some(false) {
+                    // Si no existe registro para este dominio entonces codificar
+                    // la solicitud y enviarla a POST /api/dns_resolver via HTTPS
+                    let codificado = codificar_base64(&datos);
+
+                    println!("No hay registro para este host, resolviendo con DNS externo...");
+                    
+                    // Resolver dominio
+                    let resp = match client.post(format!("{}/api/dns_resolver", dns_api_url))
+                        .json(&serde_json::json!({ "data": codificado }))
+                        .send() {
+                            Ok(r) => r,
+                            Err(e) => { eprintln!("Error en /api/dns_resolver: {e}"); return; }
+                        };
+                    let json: serde_json::Value = match resp.json() {
+                        Ok(j) => j,
+                        Err(e) => { eprintln!("Error parseando dns_resolver: {e}"); return; }
                     };
-                let json: serde_json::Value = match resp.json() {
-                    Ok(j) => j,
-                    Err(e) => { eprintln!("Error parseando dns_resolver: {e}"); continue; }
-                };
 
-                let data_str = match json["data"].as_str() {
-                    Some(s) => s,
-                    None => { eprintln!("dns_resolver no devolvió 'data'"); continue; }
-                };
+                    let data_str = match json["data"].as_str() {
+                        Some(s) => s,
+                        None => { eprintln!("dns_resolver no devolvió 'data'"); return; }
+                    };
 
-                let respuesta_dns = match decodificar_base64(data_str) {
-                    Some(b) => b,
-                    None => { eprintln!("base64 inválido en la respuesta"); continue; }
-                };
+                    let respuesta_dns = match decodificar_base64(data_str) {
+                        Some(b) => b,
+                        None => { eprintln!("base64 inválido en la respuesta"); return; }
+                    };
 
-                if let Err(e) = socket.send_to(&respuesta_dns, &src) {
-                    eprintln!("Error enviando la respuesta: {e}");
+                    if let Err(e) = socket.send_to(&respuesta_dns, &src) {
+                        eprintln!("Error enviando la respuesta: {e}");
+                    }
+                    return;
+                } else {
+                    // Filtrar los unhealthy
+                    if let Some(ips) = body["ips"].as_array_mut() {
+                        ips.retain(|e| e["healthy"].as_bool() == Some(true));
+                        if ips.is_empty() {
+                            eprintln!("No se encontraron IPs saludables para este registro");
+                            return;
+                        }
+                    }
+                    let ips = match body["ips"].as_array() {
+                        Some(a) => a,
+                        None => { eprintln!("Este registro no posee campo ips valido."); return; }
+                    };
+                    match body["type"].as_str() {
+                        Some("single") => {
+                            ip = match single_ip(ips) {
+                                Some(v) => v,
+                                None => { eprintln!("Error obteniendo la IP single"); return; }
+                            };
+                        }
+                        Some("multi") => {
+                            let counter = match body["counter"].as_u64() {
+                                Some(c) => c,
+                                None => { eprintln!("Este registro no posee campo counter valido."); return; }
+                            };
+                            ip = match multi_ip(ips, counter) {
+                                Some(v) => v,
+                                None => { eprintln!("Error obteniendo la IP multi"); return; }
+                            };
+                        }
+                        Some("weight") => {
+                            ip = match weight_ip(ips) {
+                                Some(v) => v,
+                                None => { eprintln!("Error obteniendo la IP weight"); return; }
+                            };
+                        }
+                        Some("round-trip") => println!("rr"),
+                        Some("geo") => {
+                            let codigo_pais = match respuesta_ip_country["country_code"].as_str() {
+                                Some(c) => c,
+                                None => { eprintln!("No se pudo obtener el country_code para el registro geo"); return; }
+                            };
+                            ip = match geo_ip(ips, codigo_pais) {
+                                Some(v) => v,
+                                None => { eprintln!("Error obteniendo la IP geo"); return; }
+                            };
+                        }
+                        _ => println!("Tipo de registro no soportado."),
+                    }
+                    println!("Exito! IP: {}", ip);
                 }
-                continue;
             } else {
-                // Filtrar los unhealthy
-                if let Some(ips) = body["ips"].as_array_mut() {
-                    ips.retain(|e| e["healthy"].as_bool() == Some(true));
-                    if ips.is_empty() {
-                        eprintln!("No se encontraron IPs saludables para este registro");
-                        continue;
-                    }
-                }
-                let ips = match body["ips"].as_array() {
-                    Some(a) => a,
-                    None => { eprintln!("Este registro no posee campo ips valido."); continue; }
-                };
-                match body["type"].as_str() {
-                    Some("single") => {
-                        ip = match single_ip(ips) {
-                            Some(v) => v,
-                            None => { eprintln!("Error obteniendo la IP single"); continue; }
-                        };
-                    }
-                    Some("multi") => {
-                        let counter = match body["counter"].as_u64() {
-                            Some(c) => c,
-                            None => { eprintln!("Este registro no posee campo counter valido."); continue; }
-                        };
-                        ip = match multi_ip(ips, counter) {
-                            Some(v) => v,
-                            None => { eprintln!("Error obteniendo la IP multi"); continue; }
-                        };
-                    }
-                    Some("weight") => {
-                        ip = match weight_ip(ips) {
-                            Some(v) => v,
-                            None => { eprintln!("Error obteniendo la IP weight"); continue; }
-                        };
-                    }
-                    Some("round-trip") => println!("rr"),
-                    Some("geo") => {
-                        let codigo_pais = match respuesta_ip_country["country_code"].as_str() {
-                            Some(c) => c,
-                            None => { eprintln!("No se pudo obtener el country_code para el registro geo"); continue; }
-                        };
-                        ip = match geo_ip(ips, codigo_pais) {
-                            Some(v) => v,
-                            None => { eprintln!("Error obteniendo la IP geo"); continue; }
-                        };
-                    }
-                    _ => println!("Tipo de registro no soportado."),
-                }
-                println!("Exito! IP: {}", ip);
+                println!("No estandar query");
             }
-        } else {
-            println!("No estandar query");
-        }
 
-        let buffer_respuesta = match construir_respuesta(&buffer_solicitud, &ip) {
-            Some(b) => b,
-            None => { eprintln!("No se pudo construir la respuesta (IP invalida: '{ip}')"); continue; }
-        };
+            let buffer_respuesta = match construir_respuesta(&datos, &ip) {
+                Some(b) => b,
+                None => { eprintln!("No se pudo construir la respuesta (IP invalida: '{ip}')"); return; }
+            };
 
-        if let Err(e) = socket.send_to(&buffer_respuesta, &src) {
-            eprintln!("Error enviando la respuesta: {e}");
-        }
-
+            if let Err(e) = socket.send_to(&buffer_respuesta, &src) {
+                eprintln!("Error enviando la respuesta: {e}");
+            }
+        });
     }
 }
 
