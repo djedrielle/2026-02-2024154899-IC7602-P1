@@ -72,7 +72,33 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let codificado = codificar_base64(&buffer_solicitud[..amt]);
 
                 println!("No hay registro para este host");
-                // enviar via HTTPS a POST /api/dns_resolver
+                
+                // Resolver dominio
+                let resp = match client.post(format!("{}/api/dns_resolver", dns_api_url))
+                    .json(&serde_json::json!({ "data": codificado }))
+                    .send() {
+                        Ok(r) => r,
+                        Err(e) => { eprintln!("Error en /api/dns_resolver: {e}"); continue; }
+                    };
+                let json: serde_json::Value = match resp.json() {
+                    Ok(j) => j,
+                    Err(e) => { eprintln!("Error parseando dns_resolver: {e}"); continue; }
+                };
+
+                let data_str = match json["data"].as_str() {
+                    Some(s) => s,
+                    None => { eprintln!("dns_resolver no devolvió 'data'"); continue; }
+                };
+
+                let respuesta_dns = match decodificar_base64(data_str) {
+                    Some(b) => b,
+                    None => { eprintln!("base64 inválido en la respuesta"); continue; }
+                };
+
+                if let Err(e) = socket.send_to(&respuesta_dns, &src) {
+                    eprintln!("Error enviando la respuesta: {e}");
+                }
+                continue;
             } else {
                 // Filtrar los unhealthy
                 if let Some(ips) = body["ips"].as_array_mut() {
@@ -167,7 +193,9 @@ fn codificar_base64(buffer: &[u8]) -> String {
     STANDARD.encode(buffer)
 }
 
-// Funcion para decodificar
+fn decodificar_base64(texto: &str) -> Option<Vec<u8>> {
+    STANDARD.decode(texto).ok()
+}
 
 fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Option<Vec<u8>> {
     // Encontrar el final de Question
