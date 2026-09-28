@@ -5,18 +5,32 @@ import com.tec.dnsapi.dto.DnsResolverRequest;
 import com.tec.dnsapi.dto.DnsResolverResponse;
 import com.tec.dnsapi.exception.DnsResolutionException;
 import com.tec.dnsapi.exception.InvalidDnsPacketException;
+import com.tec.dnsapi.model.DnsRecord;
+import com.tec.dnsapi.repository.DnsRecordRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.xbill.DNS.*;
+import org.xbill.DNS.Record;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class DnsResolverService {
 
-    private final DnsRemoteClient remoteClient;
+    private static final Logger log = LoggerFactory.getLogger(DnsResolverService.class);
 
-    public DnsResolverService(DnsRemoteClient remoteClient) {
+    private final DnsRemoteClient remoteClient;
+    private final DnsRecordRepository recordRepository;
+
+    public DnsResolverService(DnsRemoteClient remoteClient, DnsRecordRepository recordRepository) {
         this.remoteClient = remoteClient;
+        this.recordRepository = recordRepository;
     }
 
     /**
@@ -37,16 +51,71 @@ public class DnsResolverService {
     }
 
     /**
-     * Envia el paquete ya decodificado al DNS remoto por UDP y devuelve
-     * la respuesta codificada en BASE64. Operacion bloqueante de I/O.
+     * Envia el paquete ya decodificado al DNS remoto por UDP, guarda el dominio
+     * resuelto en la base de datos y devuelve la respuesta codificada en BASE64.
      */
     public DnsResolverResponse resolveDecoded(byte[] rawPacket) {
         try {
             byte[] rawResponse = remoteClient.resolve(rawPacket);
+            saveResolvedRecord(rawResponse);
             return new DnsResolverResponse(
                     Base64.getEncoder().encodeToString(rawResponse));
         } catch (IOException e) {
             throw new DnsResolutionException("Fallo al resolver contra el DNS remoto", e);
+        }
+    }
+
+    /**
+     * Parsea la respuesta DNS, extrae las IPs del registro y lo persiste en la BD.
+     */
+    private void saveResolvedRecord(byte[] rawResponse) {
+        try {
+            Message responseMsg = new Message(rawResponse);
+            if (responseMsg.getRcode() != Rcode.NOERROR) {
+                return;
+            }
+
+            Record question = responseMsg.getQuestion();
+            if (question == null) {
+                return;
+            }
+
+            String domainName = question.getName().toString(true).toLowerCase().trim();
+
+            List<Map<String, Object>> ips = new ArrayList<>();
+            int ttl = 300;
+
+            for (Record record : responseMsg.getSection(Section.ANSWER)) {
+                if (record instanceof ARecord aRecord) {
+                    ips.add(Map.of("ip", aRecord.getAddress().getHostAddress(), "healthy", true));
+                    ttl = (int) aRecord.getTTL();
+                }
+            }
+
+            if (ips.isEmpty()) {
+                return;
+            }
+
+            String type = ips.size() > 1 ? "multi" : "single";
+
+            Optional<DnsRecord> existing = recordRepository.findById(domainName);
+            if (existing.isPresent()) {
+                DnsRecord record = existing.get();
+                record.setType(type);
+                record.setTtl(ttl);
+                record.setIps(ips);
+                if ("multi".equals(type) && record.getCounter() == null) {
+                    record.setCounter(0);
+                }
+                recordRepository.save(record);
+            } else {
+                DnsRecord newRecord = new DnsRecord(domainName, type, ttl, ips);
+                recordRepository.save(newRecord);
+            }
+            log.info("Dominio resuelto guardado en la BD: {} (tipo: {}, ttl: {}, ips: {})",
+                    domainName, type, ttl, ips.size());
+        } catch (Exception e) {
+            log.error("No se pudo guardar en BD el dominio resuelto: {}", e.getMessage(), e);
         }
     }
 }
