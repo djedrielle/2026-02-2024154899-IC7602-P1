@@ -55,7 +55,7 @@ void save_health_result(
 
 /*
  * Actualiza el campo "healthy" de la IP 'ip_address' dentro de
- * dns_records.ips del registro 'record_name'. Las demás IPs no se tocan.
+ * records.ips del registro 'record_name'. Las demás IPs no se tocan.
  */
 void update_ip_health(PGconn *conn, const char* record_name, const char* ip_address, int is_healthy);
 

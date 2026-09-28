@@ -118,7 +118,7 @@ static int evaluate_target(const target_t* target, double* avg_latency) {
 }
 
 // Verifica un target y persiste el resultado: primero el histórico en
-// health_results y luego el estado vigente de su IP en dns_records.ips.
+// health_results y luego el estado vigente de su IP en records.ips.
 static void process_target(PGconn* conn, const target_t* target, const checker_location_t* location) {
     double avg_latency = 0.0;
     int healthy = evaluate_target(target, &avg_latency);

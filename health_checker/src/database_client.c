@@ -180,7 +180,7 @@ void update_ip_health(PGconn *conn, const char* record_name, const char* ip_addr
     };
 
     int updated = exec_command(conn, UPDATE_IP_HEALTH_QUERY, 3, values,
-                               "Error actualizando dns_records.ips");
+                               "Error actualizando records.ips");
 
     if (updated > 0) {
         printf("[HEALTH_CHECKER] record=%s ip=%s actualizado a healthy=%s\n",
@@ -188,9 +188,9 @@ void update_ip_health(PGconn *conn, const char* record_name, const char* ip_addr
                ip_address,
                pg_bool(is_healthy));
     } else if (updated == 0) {
-        // El target apunta a un registro o IP que no existe en dns_records:
+        // El target apunta a un registro o IP que no existe en records:
         // normalmente la IP se editó en la UI sin actualizar su target
-        fprintf(stderr, "[HEALTH_CHECKER] Aviso: record=%s no contiene la ip=%s en dns_records.ips\n",
+        fprintf(stderr, "[HEALTH_CHECKER] Aviso: record=%s no contiene la ip=%s en records.ips\n",
                 record_name,
                 ip_address);
     }
