@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8080}
 
 dns:
+  ui:
+    origin: ${DNS_UI_ORIGIN}
   remote:
     host: ${DNS_REMOTE_HOST:8.8.8.8}
     port: ${DNS_REMOTE_PORT:53}

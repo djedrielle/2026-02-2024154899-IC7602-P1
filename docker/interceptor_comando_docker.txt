@@ -1,0 +1,12 @@
+docker run --rm -it \
+  -p 15353:53/udp \
+  -v "$(pwd)/dns_interceptor:/app" \
+  -w /app \
+  --add-host=host.docker.internal:host-gateway \
+  -e DNS_API_URL=http://host.docker.internal:8080 \
+  rust:latest \
+  bash -c "cargo install cargo-watch && cargo watch -x run"
+
+
+De momento lo dejo como comando suelto. Ya luego hacemos el docker compose que levante
+todos los contenedores.

@@ -1,6 +1,7 @@
 package com.tec.dnsapi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tec.dnsapi.config.CorsConfig;
 import com.tec.dnsapi.dto.RecordRequest;
 import com.tec.dnsapi.dto.RecordResponse;
 import com.tec.dnsapi.service.DnsRecordService;
@@ -12,7 +13,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -24,6 +27,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(DnsRecordController.class)
+@Import(CorsConfig.class)
+@TestPropertySource(properties = "dns.ui.origin=http://localhost:3000")
 @DisplayName("DnsRecordController")
 class DnsRecordControllerTest {
 
@@ -40,6 +45,16 @@ class DnsRecordControllerTest {
 
     private RecordResponse sampleResponse() {
         return new RecordResponse("example.com", "single", 300, sampleIps);
+    }
+
+    @Test
+    @DisplayName("permite preflight desde DNS UI")
+    void allowsDnsUiCorsPreflight() throws Exception {
+        mockMvc.perform(options("/api/records")
+                .header("Origin", "http://localhost:3000")
+                .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"));
     }
 
     // -------------------------------------------------------------------------

@@ -1,0 +1,38 @@
+[
+  {
+    "start_ip": "200.0.0.0",
+    "end_ip": "200.255.255.255",
+    "country_code": "CR",
+    "country_name": "Costa Rica",
+    "city": "San Jose",
+    "latitude": 9.93,
+    "longitude": -84.08
+  },
+  {
+    "start_ip": "8.0.0.0",
+    "end_ip": "8.255.255.255",
+    "country_code": "US",
+    "country_name": "United States",
+    "city": "New York",
+    "latitude": 40.71,
+    "longitude": -74.01
+  },
+  {
+    "start_ip": "80.0.0.0",
+    "end_ip": "80.255.255.255",
+    "country_code": "DE",
+    "country_name": "Germany",
+    "city": "Berlin",
+    "latitude": 52.52,
+    "longitude": 13.40
+  },
+  {
+    "start_ip": "172.17.0.0",
+    "end_ip": "172.255.255.255",
+    "country_code": "CA",
+    "country_name": "Casa",
+    "city": "cuarto",
+    "latitude": 1.01,
+    "longitude": 10.10
+  }
+]
