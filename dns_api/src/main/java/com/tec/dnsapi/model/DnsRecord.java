@@ -25,41 +25,32 @@ public class DnsRecord {
     @Column(name = "ips", columnDefinition = "jsonb", nullable = false)
     private List<Map<String, Object>> ips;
 
-    protected DnsRecord() {
-    }
+    /**
+     * Contador de round-robin para registros de tipo "multi".
+     * Se incrementa atómicamente en cada consulta a /api/exists.
+     * Para otros tipos siempre es null.
+     */
+    @Column(name = "counter")
+    private Integer counter;
+
+    protected DnsRecord() {}
 
     public DnsRecord(String name, String type, Integer ttl, List<Map<String, Object>> ips) {
         this.name = name;
         this.type = type;
         this.ttl = ttl;
         this.ips = ips;
+        this.counter = "multi".equals(type) ? 0 : null;
     }
 
-    public String getName() {
-        return name;
-    }
+    public String getName()                        { return name; }
+    public String getType()                        { return type; }
+    public Integer getTtl()                        { return ttl; }
+    public List<Map<String, Object>> getIps()      { return ips; }
+    public Integer getCounter()                    { return counter; }
 
-    public String getType() {
-        return type;
-    }
-
-    public Integer getTtl() {
-        return ttl;
-    }
-
-    public List<Map<String, Object>> getIps() {
-        return ips;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public void setTtl(Integer ttl) {
-        this.ttl = ttl;
-    }
-
-    public void setIps(List<Map<String, Object>> ips) {
-        this.ips = ips;
-    }
+    public void setType(String type)               { this.type = type; }
+    public void setTtl(Integer ttl)                { this.ttl = ttl; }
+    public void setIps(List<Map<String, Object>> ips) { this.ips = ips; }
+    public void setCounter(Integer counter)        { this.counter = counter; }
 }

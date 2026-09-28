@@ -24,12 +24,25 @@ public class DnsRecordService {
     // Usado por el DNS Interceptor: GET /api/exists
     // -------------------------------------------------------------------------
 
-    @Transactional(readOnly = true)
+    /**
+     * Busca un registro por dominio.
+     * Para registros de tipo "multi", incrementa el counter atómicamente
+     * antes de devolver la respuesta, de forma que el Interceptor pueda
+     * aplicar round-robin usando counter % len(healthy_ips).
+     */
+    @Transactional
     public Object findByDomain(String domain) {
         String normalized = normalize(domain);
         return repository.findById(normalized)
-                .<Object>map(r -> new RecordResponse(
-                        r.getName(), r.getType(), r.getTtl(), r.getIps()))
+                .<Object>map(r -> {
+                    if ("multi".equals(r.getType())) {
+                        repository.incrementCounter(normalized);
+                        // Refrescar el valor actualizado del counter
+                        DnsRecord updated = repository.findById(normalized).orElse(r);
+                        return toResponse(updated);
+                    }
+                    return toResponse(r);
+                })
                 .orElse(false);
     }
 
@@ -40,7 +53,7 @@ public class DnsRecordService {
     @Transactional(readOnly = true)
     public List<RecordResponse> findAll() {
         return repository.findAll().stream()
-                .map(r -> new RecordResponse(r.getName(), r.getType(), r.getTtl(), r.getIps()))
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -53,7 +66,7 @@ public class DnsRecordService {
         }
         DnsRecord saved = repository.save(
                 new DnsRecord(name, req.type(), req.ttl(), req.ips()));
-        return new RecordResponse(saved.getName(), saved.getType(), saved.getTtl(), saved.getIps());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -66,9 +79,14 @@ public class DnsRecordService {
         record.setType(req.type());
         record.setTtl(req.ttl());
         record.setIps(req.ips());
+        // Resetear el counter si cambia a multi, eliminarlo si cambia de tipo
+        if ("multi".equals(req.type()) && record.getCounter() == null) {
+            record.setCounter(0);
+        } else if (!"multi".equals(req.type())) {
+            record.setCounter(null);
+        }
 
-        DnsRecord saved = repository.save(record);
-        return new RecordResponse(saved.getName(), saved.getType(), saved.getTtl(), saved.getIps());
+        return toResponse(repository.save(record));
     }
 
     @Transactional
@@ -82,6 +100,11 @@ public class DnsRecordService {
     }
 
     // -------------------------------------------------------------------------
+
+    private RecordResponse toResponse(DnsRecord r) {
+        return new RecordResponse(
+                r.getName(), r.getType(), r.getTtl(), r.getIps(), r.getCounter());
+    }
 
     private String normalize(String domain) {
         if (domain == null) return "";

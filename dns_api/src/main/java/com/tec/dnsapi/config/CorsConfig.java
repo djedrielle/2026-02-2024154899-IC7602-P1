@@ -10,7 +10,7 @@ public class CorsConfig implements WebMvcConfigurer {
 
     private final String dnsUiOrigin;
 
-    public CorsConfig(@Value("${dns.ui.origin}") String dnsUiOrigin) {
+    public CorsConfig(@Value("${dns.ui.origin:http://localhost:3000}") String dnsUiOrigin) {
         this.dnsUiOrigin = dnsUiOrigin;
     }
 
@@ -19,6 +19,6 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOrigins(dnsUiOrigin)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("Content-Type");
+                .allowedHeaders("*");
     }
 }
