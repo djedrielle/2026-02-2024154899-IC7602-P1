@@ -19,8 +19,8 @@ typedef struct {
 /* Un target tal como se leyó de la base de datos, listo para verificarse. */
 typedef struct {
     const char* target_id;
-    const char* dns_record_id; // Vacío si el target no está ligado a un registro DNS
-    int retries;               // Cantidad de intentos para decidir por mayoría
+    const char* record_name;   // records.name del registro al que pertenece la IP
+    int retries;              // Cantidad de intentos para decidir por mayoría
     check_params_t check;      // Parámetros que consume run_check()
 } target_t;
 
@@ -57,7 +57,7 @@ static target_t parse_target(const PGresult* res, int row) {
     target_t target;
 
     target.target_id     = PQgetvalue(res, row, COL_TARGET_ID);
-    target.dns_record_id = PQgetvalue(res, row, COL_DNS_RECORD_ID);
+    target.record_name   = PQgetvalue(res, row, COL_RECORD_NAME);
     target.retries       = atoi(PQgetvalue(res, row, COL_RETRIES));
 
     target.check.host            = PQgetvalue(res, row, COL_IP_ADDRESS);
@@ -118,13 +118,20 @@ static int evaluate_target(const target_t* target, double* avg_latency) {
 }
 
 // Verifica un target y persiste el resultado: primero el histórico en
-// health_results y luego el estado vigente en dns_records.
+// health_results y luego el estado vigente de su IP en dns_records.ips.
 static void process_target(PGconn* conn, const target_t* target, const checker_location_t* location) {
     double avg_latency = 0.0;
     int healthy = evaluate_target(target, &avg_latency);
 
-    save_health_result(conn, target->target_id, healthy, avg_latency, location);
-    update_dns_record_health(conn, target->dns_record_id, healthy);
+    save_health_result(conn,
+                       target->target_id,
+                       target->record_name,
+                       target->check.host,
+                       healthy,
+                       avg_latency,
+                       location);
+
+    update_ip_health(conn, target->record_name, target->check.host, healthy);
 }
 
 // Un ciclo completo: validar conexión, leer targets y procesar cada uno.

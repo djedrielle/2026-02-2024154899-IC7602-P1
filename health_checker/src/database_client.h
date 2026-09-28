@@ -21,7 +21,7 @@ typedef struct {
  */
 enum target_column {
     COL_TARGET_ID = 0,
-    COL_DNS_RECORD_ID,
+    COL_RECORD_NAME,
     COL_IP_ADDRESS,
     COL_PORT,
     COL_CHECK_TYPE,
@@ -46,12 +46,17 @@ PGresult* fetch_targets(PGconn *conn);
 void save_health_result(
     PGconn *conn,
     const char* target_id,
+    const char* record_name,
+    const char* ip_address,
     int is_healthy,
     double latency,
     const checker_location_t* location
 );
 
-/* Actualiza dns_records.healthy. No hace nada si dns_record_id está vacío. */
-void update_dns_record_health(PGconn *conn, const char* dns_record_id, int is_healthy);
+/*
+ * Actualiza el campo "healthy" de la IP 'ip_address' dentro de
+ * dns_records.ips del registro 'record_name'. Las demás IPs no se tocan.
+ */
+void update_ip_health(PGconn *conn, const char* record_name, const char* ip_address, int is_healthy);
 
 #endif

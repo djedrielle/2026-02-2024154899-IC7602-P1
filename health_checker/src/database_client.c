@@ -6,10 +6,11 @@
 
 // Consulta de targets. Los COALESCE garantizan que ninguna columna llegue
 // como NULL, así el código en C no necesita verificar PQgetisnull.
+// El orden de las columnas debe coincidir con enum target_column.
 static const char* SELECT_TARGETS_QUERY =
     "SELECT "
     "id::text, "
-    "COALESCE(dns_record_id::text, ''), "
+    "record_name, "
     "ip_address, "
     "port::text, "
     "check_type, "
@@ -23,14 +24,31 @@ static const char* SELECT_TARGETS_QUERY =
 
 static const char* INSERT_RESULT_QUERY =
     "INSERT INTO health_results "
-    "(target_id, is_healthy, latency_ms, checker_location_id, "
+    "(target_id, record_name, ip_address, is_healthy, latency_ms, checker_location_id, "
     "checker_latitude, checker_longitude, checker_country, checker_city) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
 
-static const char* UPDATE_DNS_HEALTH_QUERY =
-    "UPDATE dns_records "
-    "SET healthy = $1 "
-    "WHERE id = $2";
+// Reconstruye records.ips cambiando solo el "healthy" de la IP indicada.
+//   $1 = healthy (boolean), $2 = nombre del registro, $3 = IP
+// - jsonb_array_elements ... WITH ORDINALITY recorre el arreglo recordando la
+//   posición de cada elemento, y ORDER BY pos lo rearma en el mismo orden
+//   (importante para el round-robin de los registros "multi").
+// - jsonb_set solo modifica el elemento cuya "ip" coincide; el resto de sus
+//   campos (weight, country_code, ...) se conserva.
+// - El filtro con @> exige que la IP exista en el registro: si no existe, el
+//   UPDATE afecta 0 filas y se reporta en el log en lugar de fallar en silencio.
+static const char* UPDATE_IP_HEALTH_QUERY =
+    "UPDATE records "
+    "SET ips = ("
+        "SELECT jsonb_agg("
+            "CASE WHEN elem->>'ip' = $3::text "
+                 "THEN jsonb_set(elem, '{healthy}', to_jsonb($1::boolean)) "
+                 "ELSE elem "
+            "END ORDER BY pos) "
+        "FROM jsonb_array_elements(ips) WITH ORDINALITY AS t(elem, pos)"
+    ") "
+    "WHERE name = $2 "
+    "AND ips @> jsonb_build_array(jsonb_build_object('ip', $3::text))";
 
 // Literal booleano que PostgreSQL entiende al recibir parámetros en texto.
 // Al ser cadenas constantes no hace falta un buffer por llamada.
@@ -40,7 +58,7 @@ static const char* pg_bool(int value) {
 
 // Ejecuta un INSERT/UPDATE parametrizado (parámetros en formato texto).
 // Centraliza el manejo de errores y libera el PGresult siempre.
-// Devuelve 1 si el comando se ejecutó correctamente.
+// Devuelve la cantidad de filas afectadas, o -1 si el comando falló.
 static int exec_command(
     PGconn *conn,
     const char* query,
@@ -59,13 +77,17 @@ static int exec_command(
         0       // Resultado en formato texto
     );
 
-    int ok = (PQresultStatus(res) == PGRES_COMMAND_OK);
-    if (!ok) {
+    int affected_rows = -1;
+
+    if (PQresultStatus(res) == PGRES_COMMAND_OK) {
+        // PQcmdTuples devuelve el conteo como texto (p. ej. "1" o "0")
+        affected_rows = atoi(PQcmdTuples(res));
+    } else {
         fprintf(stderr, "%s: %s\n", error_prefix, PQerrorMessage(conn));
     }
 
     PQclear(res);
-    return ok;
+    return affected_rows;
 }
 
 PGconn* connect_to_db(void) {
@@ -122,6 +144,8 @@ PGresult* fetch_targets(PGconn *conn) {
 void save_health_result(
     PGconn *conn,
     const char* target_id,
+    const char* record_name,
+    const char* ip_address,
     int is_healthy,
     double latency,
     const checker_location_t* location
@@ -130,9 +154,11 @@ void save_health_result(
     char latency_value[64];
     snprintf(latency_value, sizeof(latency_value), "%.4f", latency);
 
-    // El orden debe coincidir con $1..$8 de INSERT_RESULT_QUERY
-    const char* values[8] = {
+    // El orden debe coincidir con $1..$10 de INSERT_RESULT_QUERY
+    const char* values[10] = {
         target_id,
+        record_name,
+        ip_address,
         pg_bool(is_healthy),
         latency_value,
         location->location_id,
@@ -142,25 +168,31 @@ void save_health_result(
         location->city
     };
 
-    exec_command(conn, INSERT_RESULT_QUERY, 8, values, "Error guardando resultado");
+    exec_command(conn, INSERT_RESULT_QUERY, 10, values, "Error guardando resultado");
 }
 
-void update_dns_record_health(PGconn *conn, const char* dns_record_id, int is_healthy) {
-    // Targets sin registro DNS asociado no tienen nada que actualizar
-    if (dns_record_id == NULL || *dns_record_id == '\0') {
-        return;
-    }
-
-    // $1 = healthy, $2 = id del registro
-    const char* values[2] = {
+void update_ip_health(PGconn *conn, const char* record_name, const char* ip_address, int is_healthy) {
+    // El orden debe coincidir con $1..$3 de UPDATE_IP_HEALTH_QUERY
+    const char* values[3] = {
         pg_bool(is_healthy),
-        dns_record_id
+        record_name,
+        ip_address
     };
 
-    if (exec_command(conn, UPDATE_DNS_HEALTH_QUERY, 2, values,
-                     "Error actualizando dns_records.healthy")) {
-        printf("[HEALTH_CHECKER] dns_record_id=%s actualizado a healthy=%s\n",
-               dns_record_id,
+    int updated = exec_command(conn, UPDATE_IP_HEALTH_QUERY, 3, values,
+                               "Error actualizando dns_records.ips");
+
+    if (updated > 0) {
+        printf("[HEALTH_CHECKER] record=%s ip=%s actualizado a healthy=%s\n",
+               record_name,
+               ip_address,
                pg_bool(is_healthy));
+    } else if (updated == 0) {
+        // El target apunta a un registro o IP que no existe en dns_records:
+        // normalmente la IP se editó en la UI sin actualizar su target
+        fprintf(stderr, "[HEALTH_CHECKER] Aviso: record=%s no contiene la ip=%s en dns_records.ips\n",
+                record_name,
+                ip_address);
     }
+    // updated == -1: exec_command ya imprimió el error
 }
