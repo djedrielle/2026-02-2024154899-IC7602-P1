@@ -25,14 +25,14 @@ public class IpCountryController {
 
     /**
      * Con ?ip=X → devuelve {"country_code":"CR"} o false (Interceptor)
-     * Sin param → devuelve la lista completa (DNS UI)
+     * Sin param → devuelve la lista completa List<IpToCountryFullResponse> (DNS UI)
      */
     @GetMapping("/ip_country")
     public ResponseEntity<Object> ipCountry(
             @RequestParam(required = false) String ip) {
 
-        if (ip != null) {
-            return ResponseEntity.ok(service.findCountryByIp(ip));
+        if (ip != null && !ip.isBlank()) {
+            return ResponseEntity.ok(service.findCountryByIp(ip.trim()));
         }
         return ResponseEntity.ok(service.findAll());
     }

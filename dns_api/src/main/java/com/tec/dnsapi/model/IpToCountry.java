@@ -1,6 +1,8 @@
 package com.tec.dnsapi.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "ip_to_country")
@@ -11,9 +13,11 @@ public class IpToCountry {
     @Column(name = "id")
     private Long id;
 
+    @JdbcTypeCode(SqlTypes.INET)
     @Column(name = "start_ip", nullable = false, columnDefinition = "inet")
     private String startIp;
 
+    @JdbcTypeCode(SqlTypes.INET)
     @Column(name = "end_ip", nullable = false, columnDefinition = "inet")
     private String endIp;
 
