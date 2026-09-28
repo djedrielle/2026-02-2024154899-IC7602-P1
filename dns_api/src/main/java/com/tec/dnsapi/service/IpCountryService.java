@@ -35,7 +35,7 @@ public class IpCountryService {
     }
 
     // -------------------------------------------------------------------------
-    // CRUD para la DNS UI: GET/POST/PUT/DELETE /api/ip_country/records
+// CRUD para la DNS UI: GET/POST/PUT/DELETE /api/ip_country
     // -------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
