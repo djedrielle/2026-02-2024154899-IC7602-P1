@@ -7,5 +7,6 @@ public record RecordResponse(
         String name,
         String type,
         Integer ttl,
-        List<Map<String, Object>> ips
+        List<Map<String, Object>> ips,
+        Integer counter        // solo para type="multi", null para el resto
 ) {}
