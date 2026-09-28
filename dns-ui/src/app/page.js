@@ -646,6 +646,7 @@ export default function Home() {
                 Nombre del dominio
                 <input
                   onChange={(event) => setRecordForm((currentRecord) => ({ ...currentRecord, domain: event.target.value }))}
+                  readOnly={isEditingRecord}
                   required
                   value={recordForm.domain}
                 />
