@@ -79,11 +79,9 @@ public class DnsRecordService {
         record.setType(req.type());
         record.setTtl(req.ttl());
         record.setIps(req.ips());
-        // Resetear el counter si cambia a multi, eliminarlo si cambia de tipo
-        if ("multi".equals(req.type()) && record.getCounter() == null) {
+        // counter es NOT NULL: los tipos que no son multi lo dejan en 0
+        if (!"multi".equals(req.type()) || record.getCounter() == null) {
             record.setCounter(0);
-        } else if (!"multi".equals(req.type())) {
-            record.setCounter(null);
         }
 
         return toResponse(repository.save(record));
