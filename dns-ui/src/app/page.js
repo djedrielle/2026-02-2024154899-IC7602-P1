@@ -5,6 +5,19 @@ import styles from "./page.module.css";
 
 const recordTypes = ["single", "multi", "weight", "round-trip", "geo"];
 const apiBaseUrl = process.env.NEXT_PUBLIC_DNS_API_URL?.replace(/\/$/, "");
+const countryPageSize = 25;
+
+class ApiError extends Error {}
+
+async function apiError(response, fallback) {
+  try {
+    const data = await response.json();
+    if (data?.error) return new ApiError(`${fallback} ${data.error}`);
+  } catch {
+    // La respuesta no traía JSON: se usa el mensaje genérico.
+  }
+  return new ApiError(fallback);
+}
 
 function emptyTarget(type) {
   if (type === "weight") return { ip: "", weight: "", healthy: true };
@@ -170,6 +183,11 @@ export default function Home() {
   const [recordActionError, setRecordActionError] = useState("");
   const [deletingRecord, setDeletingRecord] = useState("");
   const [countryRecords, setCountryRecords] = useState([]);
+  const [countryPage, setCountryPage] = useState(0);
+  const [countryPageInput, setCountryPageInput] = useState("");
+  const [countryHasNext, setCountryHasNext] = useState(false);
+  const [countryReload, setCountryReload] = useState(0);
+  const [countryNotice, setCountryNotice] = useState("");
   const [countryLoading, setCountryLoading] = useState(true);
   const [countryError, setCountryError] = useState("");
   const [countrySaving, setCountrySaving] = useState(false);
@@ -227,24 +245,40 @@ export default function Home() {
       }
     }
 
+    loadRecords();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+
     async function loadCountryRecords() {
       if (!apiBaseUrl) {
-        if (isCurrent) {
-          setCountryError("Configura NEXT_PUBLIC_DNS_API_URL para cargar los rangos.");
-          setCountryLoading(false);
-        }
+        setCountryError("Configura NEXT_PUBLIC_DNS_API_URL para cargar los rangos.");
+        setCountryLoading(false);
         return;
       }
 
+      setCountryLoading(true);
       try {
-        const response = await fetch(`${apiBaseUrl}/api/ip_country`);
+        const response = await fetch(
+          `${apiBaseUrl}/api/ip_country?page=${countryPage}&size=${countryPageSize}`,
+        );
         if (!response.ok) {
           throw new Error("No se pudieron obtener los rangos.");
         }
         const data = await response.json();
-        if (isCurrent) {
-          setCountryRecords(data);
+        if (!isCurrent) return;
+        if (data.length === 0 && countryPage > 0) {
+          setCountryPage(countryPage - 1);
+          return;
         }
+        setCountryRecords(data);
+        setCountryHasNext(data.length === countryPageSize);
+        setCountryError("");
       } catch {
         if (isCurrent) {
           setCountryError("No se pudieron cargar los registros IP to Country.");
@@ -256,13 +290,12 @@ export default function Home() {
       }
     }
 
-    loadRecords();
     loadCountryRecords();
 
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [countryPage, countryReload]);
 
   function openNewRecord() {
     setRecordForm(emptyRecord());
@@ -303,7 +336,7 @@ export default function Home() {
         body: JSON.stringify(recordToApi(recordForm)),
       });
       if (!response.ok) {
-        throw new Error("No se pudo crear el registro.");
+        throw await apiError(response, "No se pudo guardar el registro DNS:");
       }
 
       const savedRecord = await response.json();
@@ -313,7 +346,7 @@ export default function Home() {
         { method: "DELETE" },
       );
       if (!targetResponse.ok) {
-        throw new Error("No se pudo reemplazar la configuración de health check.");
+        throw await apiError(targetResponse, "No se pudo reemplazar la configuración de health check:");
       }
 
       const savedTargets = await Promise.all(targetsToApi({
@@ -326,7 +359,7 @@ export default function Home() {
           body: JSON.stringify(target),
         });
         if (!targetResponse.ok) {
-          throw new Error("No se pudo guardar la configuración de health check.");
+          throw await apiError(targetResponse, "No se pudo guardar la configuración de health check:");
         }
         return targetResponse.json();
       }));
@@ -339,10 +372,11 @@ export default function Home() {
           : [...currentRecords, savedUiRecord],
       );
       setRecordPanel(null);
-    } catch {
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "";
       setRecordSaveError(recordWasSaved
-        ? "El registro DNS se guardó, pero no se pudo guardar su health check. Intenta guardar nuevamente."
-        : "No se pudo guardar el registro DNS.");
+        ? `El registro DNS se guardó, pero no se pudo guardar su health check. ${detail || "Intenta guardar nuevamente."}`
+        : detail || "No se pudo guardar el registro DNS.");
     } finally {
       setRecordSaving(false);
     }
@@ -363,21 +397,21 @@ export default function Home() {
         { method: "DELETE" },
       );
       if (!targetsResponse.ok) {
-        throw new Error("No se pudieron eliminar los targets.");
+        throw await apiError(targetsResponse, "No se pudieron eliminar los targets:");
       }
       const response = await fetch(
         `${apiBaseUrl}/api/records/${encodeURIComponent(record.domain)}`,
         { method: "DELETE" },
       );
       if (!response.ok) {
-        throw new Error("No se pudo eliminar el registro.");
+        throw await apiError(response, "No se pudo eliminar el registro:");
       }
 
       setRecords((currentRecords) =>
         currentRecords.filter((_, recordIndex) => recordIndex !== index),
       );
-    } catch {
-      setRecordActionError("No se pudo eliminar el registro DNS.");
+    } catch (error) {
+      setRecordActionError(error instanceof ApiError ? error.message : "No se pudo eliminar el registro DNS.");
     } finally {
       setDeletingRecord("");
     }
@@ -426,13 +460,22 @@ export default function Home() {
   function openNewCountryRecord() {
     setCountryForm(emptyCountryRecord());
     setCountryActionError("");
+    setCountryNotice("");
     setCountryPanel({ mode: "create" });
   }
 
   function openEditCountryRecord(index) {
-    setCountryForm({ ...countryRecords[index] });
+    const record = countryRecords[index];
+    setCountryForm({
+      ...record,
+      country_name: record.country_name ?? "",
+      city: record.city ?? "",
+      latitude: record.latitude ?? "",
+      longitude: record.longitude ?? "",
+    });
     setCountryPanel({ mode: "edit", index });
     setCountryActionError("");
+    setCountryNotice("");
   }
 
   async function saveCountryRecord(event) {
@@ -454,19 +497,14 @@ export default function Home() {
         body: JSON.stringify(countryToApi(countryForm)),
       });
       if (!response.ok) {
-        throw new Error("No se pudo guardar el rango.");
+        throw await apiError(response, "No se pudo guardar el registro IP to Country:");
       }
       const savedCountry = await response.json();
-      setCountryRecords((currentRecords) =>
-        isEditingCountry
-          ? currentRecords.map((record, index) =>
-            index === countryPanel.index ? savedCountry : record,
-          )
-          : [...currentRecords, savedCountry],
-      );
       setCountryPanel(null);
-    } catch {
-      setCountryActionError("No se pudo guardar el registro IP to Country.");
+      setCountryNotice(`Registro guardado (id ${savedCountry.id}).`);
+      setCountryReload((current) => current + 1);
+    } catch (error) {
+      setCountryActionError(error instanceof ApiError ? error.message : "No se pudo guardar el registro IP to Country.");
     } finally {
       setCountrySaving(false);
     }
@@ -486,13 +524,12 @@ export default function Home() {
         method: "DELETE",
       });
       if (!response.ok) {
-        throw new Error("No se pudo eliminar el rango.");
+        throw await apiError(response, "No se pudo eliminar el registro IP to Country:");
       }
-      setCountryRecords((currentRecords) =>
-        currentRecords.filter((currentRecord) => currentRecord.id !== record.id),
-      );
-    } catch {
-      setCountryActionError("No se pudo eliminar el registro IP to Country.");
+      setCountryNotice("Registro eliminado.");
+      setCountryReload((current) => current + 1);
+    } catch (error) {
+      setCountryActionError(error instanceof ApiError ? error.message : "No se pudo eliminar el registro IP to Country.");
     } finally {
       setDeletingCountry("");
     }
@@ -641,9 +678,9 @@ export default function Home() {
             />
           </label>
           <label>
-            Timeout
+            Timeout (ms)
             <input
-              min="0"
+              min="1"
               onChange={(event) => updateHealthCheck("timeout", event.target.value)}
               required
               type="number"
@@ -793,6 +830,7 @@ export default function Home() {
               </button>
             </div>
             {countryActionError && <p role="alert">{countryActionError}</p>}
+            {countryNotice && <p role="status">{countryNotice}</p>}
             {countryLoading ? (
               <div className={styles.emptyState}>
                 <h2>Cargando registros IP to Country</h2>
@@ -821,11 +859,11 @@ export default function Home() {
                   </thead>
                   <tbody>
                     {countryRecords.map((record, index) => (
-                      <tr key={`${record.start_ip}-${record.end_ip}-${index}`}>
+                      <tr key={record.id ?? `${record.start_ip}-${record.end_ip}-${index}`}>
                         <td className={styles.mono}>{record.start_ip} — {record.end_ip}</td>
                         <td>{record.country_code}{record.country_name ? ` · ${record.country_name}` : ""}</td>
                         <td>{record.city || "—"}</td>
-                        <td>{record.latitude !== "" && record.longitude !== "" ? `${record.latitude}, ${record.longitude}` : "—"}</td>
+                        <td>{record.latitude != null && record.longitude != null ? `${record.latitude}, ${record.longitude}` : "—"}</td>
                         <td className={styles.actions}>
                           <button onClick={() => openEditCountryRecord(index)} type="button">Editar</button>
                           <button
@@ -841,6 +879,49 @@ export default function Home() {
                   </tbody>
                 </table>
               </div>
+            )}
+            {!countryError && (
+              <nav aria-label="Paginación de rangos IP" className={styles.pagination}>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={countryPage === 0 || countryLoading}
+                  onClick={() => setCountryPage((page) => page - 1)}
+                  type="button"
+                >
+                  Anterior
+                </button>
+                <span>Página {countryPage + 1}</span>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={!countryHasNext || countryLoading}
+                  onClick={() => setCountryPage((page) => page + 1)}
+                  type="button"
+                >
+                  Siguiente
+                </button>
+                <form
+                  className={styles.pageJump}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const page = Number(countryPageInput);
+                    if (Number.isInteger(page) && page >= 1) {
+                      setCountryPage(page - 1);
+                      setCountryPageInput("");
+                    }
+                  }}
+                >
+                  <label>
+                    Ir a la página
+                    <input
+                      min="1"
+                      onChange={(event) => setCountryPageInput(event.target.value)}
+                      type="number"
+                      value={countryPageInput}
+                    />
+                  </label>
+                  <button className={styles.secondaryButton} type="submit">Ir</button>
+                </form>
+              </nav>
             )}
           </section>
         )}
