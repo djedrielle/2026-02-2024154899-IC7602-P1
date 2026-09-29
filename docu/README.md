@@ -1,6 +1,5 @@
 # Proyecto 1 - Redes
 
-«Pequeña descripción de los objetivos del proyecto.»
 
 ## Miembros del grupo
 
