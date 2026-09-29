@@ -323,6 +323,43 @@ curl -i -X DELETE http://localhost:8080/api/records/no-existe.example.com       
 
 ### DNS UI
 
+Las pruebas se hicieron con el DNS API disponible en `http://localhost:8080`.
+
+Los prompts utilizados y los problemas encontrados se documentan en [Uso de IA](uso-ia.md).
+
+#### 1. Iniciar la interfaz
+
+Desde la carpeta principal del proyecto:
+
+```bash
+cd dns-ui
+docker compose up --build
+```
+
+Abrir `http://localhost:3000`. La página debe cargar y mostrar los registros DNS.
+
+#### 2. Probar los registros DNS
+
+1. Crear un registro de cada tipo: `single`, `multi`, `weight`, `round-trip` y `geo`.
+2. Editar uno de los registros.
+3. Eliminar uno de los registros.
+
+**Resultado esperado:** los cambios se muestran en la tabla y quedan guardados en el DNS API.
+
+#### 3. Probar los health checks
+
+1. Crear un registro con una prueba TCP.
+2. Editar el registro y cambiar la prueba a HTTP.
+3. Guardar los cambios.
+
+**Resultado esperado:** la interfaz guarda los datos de cada prueba sin errores.
+
+#### 4. Probar los rangos IP por país
+
+1. Crear un rango de IP y asignarle un país.
+2. Editar el rango.
+3. Eliminar el rango.
+
 ### Health Checker
 
 Las pruebas se ejecutan al correr el programa utilizando Docker, el programa corre en su propio contenedor e irá actualizando en consola todo lo que está pasando
@@ -387,6 +424,11 @@ Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no
    proxy de la ubicación del cliente.
 4. Armar un DNS propio ayuda a entender lo que pasa cada vez que se abre una página web. Como detrás hay un paquete con un formato exacto, una consulta al servidor correcto y una respuesta que debe llegar a tiempo. Ver que cada tipo de registro (`single`, `multi`, `weight`, `geo`, `round-trip`) es una forma distinta de decidir a qué servidor mandar al usuario muestra que el DNS sirve, además de traducir nombres, para repartir carga y elegir el mejor servidor.
 5. Un DNS tiene que ser rápido y no puede fallar aunque algo a su alrededor falle. Cada consulta espera una respuesta al instante, así que se notó cuánto pesa la latencia de la plataforma y por qué hay que decidir qué hacer si el API o un servidor no responden.
+6. La mayoría simple sobre varios intentos (retries) por ciclo es suficiente para absorber fallas transitorias de red y evitar que un solo timeout puntual marque un servicio sano como caído.
+7. Casi todos los problemas encontrados durante las pruebas no fueron de lógica del programa, sino de infraestructura externa: resolución IPv6, límites de pooling de conexiones, y comportamiento de balanceadores/CDNs frente a chequeos por IP directa.
+8. Agregar timestamp a cada línea de log fue clave para poder correlacionar eventos en el tiempo — por ejemplo, para confirmar que una caída de conexión a la base de datos ocurrió a mitad de un ciclo y no al inicio.
+9. La interfaz web facilita el manejo de los registros DNS, ya que permite crear, editar y eliminar la información sin trabajar directamente con la base de datos.
+10. La conexión entre la DNS UI y el DNS API permitió mantener separada la parte visual de la lógica del sistema, haciendo que el proyecto sea más fácil de entender y probar.
 
 ### Recomendaciones
 
@@ -398,3 +440,6 @@ Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no
 5. Guardar las respuestas más frecuentes en memoria por el tiempo que indica el TTL, como hacen los DNS reales. Así no se consultaría la base de datos en cada solicitud y el sistema respondería más rápido y aguantaría más consultas.
 6. Poner más de una copia del Interceptor y más Health Checkers en distintas ubicaciones. Hoy, si el Interceptor cae, ya no hay DNS. Con más réplicas el servicio seguiría en pie y la elección `round-trip` y `geo` sería más precisa.
 7. Probar el sistema con más carga y más casos: muchos usuarios a la vez, registros cuyas IPs quedan todas no saludables, y servidores DNS externos que fallan. Son situaciones comunes en un DNS real, y conocer cómo responde el sistema nos diría dónde reforzarlo primero.
+8. Registrar en el log el código de respuesta HTTP real obtenido (no solo "UP"/"DOWN"), para poder diagnosticar sin adivinar por qué un chequeo falló.
+9. Coordinar con el resto del equipo el uso de conexiones durante las pruebas (apagar contenedores de prueba que ya no se estén usando), para no agotar el pool compartido de Supabase entre todos los integrantes.
+10. Evaluar agregar reintentos con backoff progresivo para la reconexión a la base de datos, en vez de esperar el intervalo completo del ciclo tras una caída, para reducir el tiempo sin monitoreo activo.
