@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-checker-us
+  namespace: dns
+  labels:
+    app: health-checker
+    location: us
+spec:
+  # Una sola réplica por ubicación: más réplicas duplicarían los chequeos de esa ubicación.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: health-checker
+      location: us
+  template:
+    metadata:
+      labels:
+        app: health-checker
+        location: us
+    spec:
+      containers:
+        - name: health-checker
+          image: health-checker:local
+          imagePullPolicy: IfNotPresent
+          # printf a un pipe queda con buffer completo: stdbuf -oL vacía el log línea a línea.
+          command: ["stdbuf", "-oL", "./bin/health-checker"]
+          envFrom:
+            - configMapRef:
+                name: health-checker-config
+            - secretRef:
+                name: health-checker-secret
+          env:
+            - name: CHECKER_LOCATION_ID
+              value: "US-01"
+            - name: CHECKER_COUNTRY
+              value: "US"
+            - name: CHECKER_CITY
+              value: "New York"
+            - name: CHECKER_LATITUDE
+              value: "40.7128"
+            - name: CHECKER_LONGITUDE
+              value: "-74.0060"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
