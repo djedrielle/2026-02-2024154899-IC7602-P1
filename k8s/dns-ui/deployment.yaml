@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-ui
+  namespace: dns
+  labels:
+    app: dns-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-ui
+  template:
+    metadata:
+      labels:
+        app: dns-ui
+    spec:
+      containers:
+        - name: dns-ui
+          # NEXT_PUBLIC_DNS_API_URL se fija al compilar la imagen (--build-arg), no en runtime.
+          image: dns-ui:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3

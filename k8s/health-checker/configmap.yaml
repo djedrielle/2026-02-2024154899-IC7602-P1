@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-checker-config
+  namespace: dns
+  labels:
+    app: health-checker
+data:
+  # Configuración común a todas las ubicaciones. La ubicación (id, país, ciudad, lat/lon)
+  # va como variables de entorno en cada Deployment.
+  CHECK_INTERVAL_SECONDS: "30"
