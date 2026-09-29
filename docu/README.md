@@ -15,8 +15,9 @@
 
 - **DNS Interceptor:** Aplicación desarrollada en Rust que escucha en el puerto UDP/53. Esta aplicación recibe paquetes del protocolo DNS, los examina y siguiendo la especificación oficial del RFC2929, los procesa.
 - **DNS API:**
-- **DNS UI:**
 - **Health Checker:** Aplicación desarrollada en C, tiene un ciclo de vida constante que revisa la base de datos Supabase y realiza solicitudes a los records, y dependiendo del código de respuesta y tiempo de respuesta marca estos records como saludables o no saludables.
+- **DNS UI:** Interfaz web para crear, editar y eliminar registros DNS. También permite configurar health checks y administrar rangos IP por país.
+
 
 ## Ejecutar el proyecto
 
@@ -40,7 +41,9 @@
 | DNS API         | Funcionalidad                |   ⬜     | «Por completar por el responsable del módulo.»                                                    |
 | Health Checker  | Registro de checkeos         |   100%   | Sube a la base de datos un registro de auditoría de todos los checkeos hechos                                                  |
 | Health Checker  | Ciclo de checkeos            |   100%   | Cicla constantemente el programa para revisar el estado de salud de cada target                                                  |
-| DNS UI          | Funcionalidad                |   ⬜     | «Por completar por el responsable del módulo.»                                                    |
+| DNS UI          | Registros DNS              |  100%  | Permite crear, editar y eliminar los cinco tipos de registro.                                     |
+| DNS UI          | Health checks              |  100%  | Permite configurar pruebas TCP y HTTP para las IP de un registro.                                 |
+| DNS UI          | Rangos IP por país         |  100%  | Permite crear, editar y eliminar rangos de IP.                                                    |
 
 ## Pruebas realizadas
 
@@ -197,6 +200,7 @@ y reiniciar `systemd-resolved`.
 > (truncación / bit `TC`) o dominios muy grandes pueden fallar.
 
 ### DNS API
+
 ### DNS UI
 
 ### Health Checker

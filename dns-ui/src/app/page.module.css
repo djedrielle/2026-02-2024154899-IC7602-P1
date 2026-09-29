@@ -407,3 +407,30 @@
     width: 100%;
   }
 }
+
+.pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
+.pageJump {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.pageJump label {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.pageJump input {
+  width: 90px;
+}
