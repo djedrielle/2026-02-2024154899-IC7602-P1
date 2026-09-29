@@ -1,0 +1,15 @@
+services:
+  dns-interceptor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dns-interceptor
+    ports:
+      # Loopback:53 para usarlo como DNS del sistema (systemd-resolved -> 127.0.0.1).
+      # Override para desarrollo, p. ej.: DNS_INTERCEPTOR_ADDR=0.0.0.0 DNS_INTERCEPTOR_PORT=15353
+      - "${DNS_INTERCEPTOR_ADDR:-127.0.0.1}:${DNS_INTERCEPTOR_PORT:-53}:53/udp"
+    environment:
+      DNS_API_URL: ${DNS_API_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

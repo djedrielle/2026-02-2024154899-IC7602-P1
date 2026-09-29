@@ -1,0 +1,42 @@
+server:
+  port: ${SERVER_PORT:8080}
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${SSL_KEYSTORE_PATH:}
+    key-store-password: ${SSL_KEYSTORE_PASSWORD:}
+    key-store-type: PKCS12
+
+dns:
+  http:
+    # Puerto HTTP adicional cuando SSL_ENABLED=true (0 = solo HTTPS). La DNS UI lo usa desde el navegador.
+    port: ${HTTP_PORT:0}
+  ui:
+    origin: ${DNS_UI_ORIGIN}
+  remote:
+    host: ${DNS_REMOTE_HOST:8.8.8.8}
+    port: ${DNS_REMOTE_PORT:53}
+    timeout-ms: ${DNS_REMOTE_TIMEOUT_MS:5000}
+    retries: ${DNS_REMOTE_RETRIES:1}
+  executor:
+    core-size: ${DNS_EXECUTOR_CORE_SIZE:16}
+    max-size: ${DNS_EXECUTOR_MAX_SIZE:64}
+    queue-capacity: ${DNS_EXECUTOR_QUEUE_CAPACITY:200}
+
+spring:
+  datasource:
+    url: ${SUPABASE_DB_URL}
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.tec.dnsapi: DEBUG

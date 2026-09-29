@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-api
+  namespace: dns
+  labels:
+    app: dns-api
+spec:
+  replicas: 1
+  # Recreate: un rolling update abriría dos pods a la vez y el pooler de Supabase (15 conexiones) no lo admite.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: dns-api
+  template:
+    metadata:
+      labels:
+        app: dns-api
+    spec:
+      containers:
+        - name: dns-api
+          image: dns-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: https
+              containerPort: 8443
+          envFrom:
+            - configMapRef:
+                name: dns-api-config
+            - secretRef:
+                name: dns-api-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 768Mi
+          # Sin actuator: se usa TCP para no depender de endpoints que consultan la BD.
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3

@@ -1,0 +1,9 @@
+services:
+  health-checker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: health-checker
+    env_file:
+      - .env
+    restart: unless-stopped

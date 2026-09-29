@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-interceptor-config
+  namespace: dns
+  labels:
+    app: dns-interceptor
+data:
+  # Nombre del Service de dns-api (mismo namespace) y su puerto HTTPS. El interceptor acepta el certificado autofirmado.
+  DNS_API_URL: "https://dns-api:8443"
