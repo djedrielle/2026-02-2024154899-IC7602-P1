@@ -21,7 +21,6 @@ function emptyHealthCheck() {
     port: "80",
     timeout: "",
     retries: "",
-    interval: "",
     path: "",
     expectedCodes: "",
     basicAuthUser: "",
@@ -60,7 +59,6 @@ function healthCheckFromTargets(targets) {
     port: target.port ?? "80",
     timeout: target.timeout_ms ?? "",
     retries: target.retries ?? "",
-    interval: "",
     path: target.http_path ?? "",
     expectedCodes: (target.expected_status_codes ?? []).join(", "),
     basicAuthUser: target.basic_auth_user ?? "",
@@ -660,15 +658,6 @@ export default function Home() {
               required
               type="number"
               value={healthCheck.retries}
-            />
-          </label>
-          <label>
-            Intervalo entre pruebas (pendiente de soporte en API)
-            <input
-              min="0"
-              onChange={(event) => updateHealthCheck("interval", event.target.value)}
-              type="number"
-              value={healthCheck.interval}
             />
           </label>
         </div>
