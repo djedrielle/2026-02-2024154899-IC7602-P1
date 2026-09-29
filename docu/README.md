@@ -36,7 +36,10 @@
 
 ## Pruebas realizadas
 
-«»
+### DNS Interceptor
+### DNS API
+### DNS UI
+### Health Checker
 
 ## Video de demostración
 
