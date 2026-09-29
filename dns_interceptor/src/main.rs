@@ -241,7 +241,14 @@ fn construir_respuesta(buffer_solicitud: &[u8], ip: &str) -> Option<Vec<u8>> {
     buffer_respuesta.extend_from_slice(&buffer_solicitud[..i_final_question]);
     
     buffer_respuesta[2] |= 0x80; // Cambiar QR a 1 (indicar que es una respuesta)
-    buffer_respuesta[7] = 0x1; // Cambiar ANCOUNT (indicar que hay una respuesta)
+    buffer_respuesta[6] = 0x00; // ANCOUNT (byte alto)
+    buffer_respuesta[7] = 0x01; // ANCOUNT (byte bajo) = 1 (hay una respuesta)
+    buffer_respuesta[8] = 0x00; // NSCOUNT = 0 (sin seccion Authority)
+    buffer_respuesta[9] = 0x00;
+    buffer_respuesta[10] = 0x00; // ARCOUNT (byte alto)
+    buffer_respuesta[11] = 0x00; // ARCOUNT (byte bajo) = 0: descartamos el OPT/EDNS del query.
+                                 // Si no, el header prometeria un registro adicional inexistente
+                                 // y dig avisaria "malformed message packet".
     
     // NAME de la respuesta. Pasamos un puntero a donde se encuentra el name del query
     buffer_respuesta.push(0xC0); // Indicar que es puntero

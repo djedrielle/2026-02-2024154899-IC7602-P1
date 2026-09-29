@@ -20,12 +20,12 @@ HOST="${1:-127.0.0.1}"
 PORT="${2:-15353}"
 
 # Dominios de prueba (deben existir en la base de datos con las semillas).
-SINGLE="single.example.com"
-MULTI="multi.example.com"
-WEIGHT="weight.example.com"
-GEO="geo.example.com"
+SINGLE="google.com"
+MULTI="miro.com"
+WEIGHT="demo-weighted-dns"
+GEO="demo-geo-dns"
 RTT="rtt.example.com"
-EXTERNO="google.com"
+EXTERNO="api.supabase.com"
 
 command -v dig >/dev/null || { echo "Falta 'dig' (instala dnsutils / bind-utils)."; exit 1; }
 
@@ -42,7 +42,7 @@ titulo "multi  ($MULTI)  -> round-robin (6 consultas, la IP rota)"
 for _ in $(seq 1 6); do "${DIG[@]}" "$MULTI"; done
 
 titulo "weight  ($WEIGHT)  -> distribución ponderada (100 consultas)"
-for _ in $(seq 1 100); do "${DIG[@]}" "$WEIGHT"; done | sort | uniq -c
+for _ in $(seq 1 20); do "${DIG[@]}" "$WEIGHT"; done | sort | uniq -c
 
 titulo "geo  ($GEO)  -> IP según el país del cliente"
 "${DIG[@]}" "$GEO"
