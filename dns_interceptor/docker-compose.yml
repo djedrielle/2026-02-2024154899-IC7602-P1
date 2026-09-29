@@ -1,0 +1,13 @@
+services:
+  dns-interceptor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dns-interceptor
+    ports:
+      - "${DNS_INTERCEPTOR_PORT:-15353}:53/udp"
+    environment:
+      DNS_API_URL: ${DNS_API_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
