@@ -1,9 +1,13 @@
 package com.tec.dnsapi.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
@@ -64,5 +68,50 @@ public class DnsApiExceptionHandler {
                 }
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                                 .body(Map.of("error", "Error inesperado al procesar la solicitud"));
+        }
+
+        /** Datos que no cumplen las reglas de validación de la API. */
+        @ExceptionHandler(InvalidRequestException.class)
+        public ResponseEntity<Map<String, String>> handleInvalidRequest(InvalidRequestException e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", e.getMessage()));
+        }
+
+        /**
+         * Restricciones de la base (unicidad, llaves foráneas, checks). No se expone el
+         * mensaje SQL: se traduce a 409 (duplicado) o 400 (referencia/valor inválido).
+         */
+        @ExceptionHandler(DataIntegrityViolationException.class)
+        public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException e) {
+                String detail = e.getMostSpecificCause().getMessage();
+                String lower = detail == null ? "" : detail.toLowerCase();
+                if (lower.contains("duplicate key")) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT)
+                                        .body(Map.of("error", "Ya existe un elemento con esos datos"));
+                }
+                if (lower.contains("foreign key")) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                        .body(Map.of("error", "Hace referencia a un elemento que no existe"));
+                }
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "Los datos no cumplen las restricciones de la base de datos"));
+        }
+
+        @ExceptionHandler(HttpMessageNotReadableException.class)
+        public ResponseEntity<Map<String, String>> handleUnreadableBody(HttpMessageNotReadableException e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "El cuerpo de la petición no es un JSON válido"));
+        }
+
+        @ExceptionHandler(MissingServletRequestParameterException.class)
+        public ResponseEntity<Map<String, String>> handleMissingParameter(MissingServletRequestParameterException e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "Falta el parámetro obligatorio: " + e.getParameterName()));
+        }
+
+        @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+        public ResponseEntity<Map<String, String>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "Valor inválido para el parámetro: " + e.getName()));
         }
 }

@@ -44,7 +44,7 @@ class DnsRecordControllerTest {
     private final List<Map<String, Object>> sampleIps = List.of(Map.of("ip", "1.2.3.4", "healthy", true));
 
     private RecordResponse sampleResponse() {
-        return new RecordResponse("example.com", "single", 300, sampleIps);
+        return new RecordResponse("example.com", "single", 300, sampleIps, 0);
     }
 
     @Test
@@ -130,7 +130,7 @@ class DnsRecordControllerTest {
         @DisplayName("devuelve 201 con el registro creado")
         void returnsCreatedRecord() throws Exception {
             RecordRequest req = new RecordRequest("newdomain.com", "single", 300, sampleIps);
-            RecordResponse created = new RecordResponse("newdomain.com", "single", 300, sampleIps);
+            RecordResponse created = new RecordResponse("newdomain.com", "single", 300, sampleIps, 0);
             when(service.create(any(RecordRequest.class))).thenReturn(created);
 
             mockMvc.perform(post("/api/records")
@@ -168,7 +168,7 @@ class DnsRecordControllerTest {
         void returnsUpdatedRecord() throws Exception {
             List<Map<String, Object>> newIps = List.of(Map.of("ip", "9.9.9.9", "healthy", true));
             RecordRequest req = new RecordRequest("example.com", "multi", 600, newIps);
-            RecordResponse updated = new RecordResponse("example.com", "multi", 600, newIps);
+            RecordResponse updated = new RecordResponse("example.com", "multi", 600, newIps, 0);
             when(service.update(eq("example.com"), any(RecordRequest.class))).thenReturn(updated);
 
             mockMvc.perform(put("/api/records/example.com")

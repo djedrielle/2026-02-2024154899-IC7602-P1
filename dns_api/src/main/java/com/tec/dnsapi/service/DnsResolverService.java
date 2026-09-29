@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class DnsResolverService {
@@ -43,11 +42,18 @@ public class DnsResolverService {
             throw new InvalidDnsPacketException(
                     "El campo 'data' es obligatorio y no puede estar vacio");
         }
+        byte[] rawPacket;
         try {
-            return Base64.getDecoder().decode(request.data());
+            rawPacket = Base64.getDecoder().decode(request.data());
         } catch (IllegalArgumentException e) {
             throw new InvalidDnsPacketException("El campo 'data' no es BASE64 valido", e);
         }
+        try {
+            new Message(rawPacket);
+        } catch (IOException | RuntimeException e) {
+            throw new InvalidDnsPacketException("El campo 'data' no contiene un paquete DNS valido", e);
+        }
+        return rawPacket;
     }
 
     /**
@@ -98,20 +104,13 @@ public class DnsResolverService {
 
             String type = ips.size() > 1 ? "multi" : "single";
 
-            Optional<DnsRecord> existing = recordRepository.findById(domainName);
-            if (existing.isPresent()) {
-                DnsRecord record = existing.get();
-                record.setType(type);
-                record.setTtl(ttl);
-                record.setIps(ips);
-                if ("multi".equals(type) && record.getCounter() == null) {
-                    record.setCounter(0);
-                }
-                recordRepository.save(record);
-            } else {
-                DnsRecord newRecord = new DnsRecord(domainName, type, ttl, ips);
-                recordRepository.save(newRecord);
+            // Un registro existente puede haberlo definido un usuario (con su tipo, pesos o países):
+            // la resolución recursiva nunca lo sobrescribe.
+            if (recordRepository.existsById(domainName)) {
+                log.info("El dominio {} ya existe en la BD; no se sobrescribe", domainName);
+                return;
             }
+            recordRepository.save(new DnsRecord(domainName, type, ttl, ips));
             log.info("Dominio resuelto guardado en la BD: {} (tipo: {}, ttl: {}, ips: {})",
                     domainName, type, ttl, ips.size());
         } catch (Exception e) {

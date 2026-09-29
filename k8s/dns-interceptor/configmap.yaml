@@ -6,5 +6,5 @@ metadata:
   labels:
     app: dns-interceptor
 data:
-  # Se resuelve por el nombre del Service de dns-api (mismo namespace) y su puerto.
-  DNS_API_URL: "http://dns-api:8080"
+  # Nombre del Service de dns-api (mismo namespace) y su puerto HTTPS. El interceptor acepta el certificado autofirmado.
+  DNS_API_URL: "https://dns-api:8443"

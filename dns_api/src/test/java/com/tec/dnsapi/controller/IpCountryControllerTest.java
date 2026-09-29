@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tec.dnsapi.dto.IpCountryResponse;
 import com.tec.dnsapi.dto.IpToCountryFullResponse;
 import com.tec.dnsapi.dto.IpToCountryRequest;
+import com.tec.dnsapi.exception.InvalidRequestException;
 import com.tec.dnsapi.service.IpCountryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -78,7 +80,7 @@ class IpCountryControllerTest {
                     .andExpect(jsonPath("$.country_code").value("CR"));
 
             verify(service).findCountryByIp("10.0.0.1");
-            verify(service, never()).findAll();
+            verify(service, never()).findPage(anyInt(), anyInt());
         }
 
         @Test
@@ -91,17 +93,17 @@ class IpCountryControllerTest {
                     .andExpect(content().string("false"));
 
             verify(service).findCountryByIp("192.168.1.1");
-            verify(service, never()).findAll();
+            verify(service, never()).findPage(anyInt(), anyInt());
         }
 
         @Test
-        @DisplayName("sin parámetro ip devuelve 200 con la lista completa de rangos (DNS UI)")
+        @DisplayName("sin parámetro ip devuelve 200 con la primera página de rangos, 100 por defecto (DNS UI)")
         void returnsFullListWhenNoIpParamProvided() throws Exception {
             List<IpToCountryFullResponse> list = List.of(
                     sampleFullResponse(1L),
                     new IpToCountryFullResponse(2L, "20.0.0.0", "20.0.0.255", "US", "United States", "Miami", 25.76,
                             -80.19));
-            when(service.findAll()).thenReturn(list);
+            when(service.findPage(0, 100)).thenReturn(list);
 
             mockMvc.perform(get("/api/ip_country"))
                     .andExpect(status().isOk())
@@ -113,19 +115,58 @@ class IpCountryControllerTest {
                     .andExpect(jsonPath("$[1].id").value(2))
                     .andExpect(jsonPath("$[1].country_code").value("US"));
 
-            verify(service).findAll();
+            verify(service).findPage(0, 100);
             verify(service, never()).findCountryByIp(any());
         }
 
         @Test
         @DisplayName("sin parámetro ip devuelve lista vacía cuando no hay registros")
         void returnsEmptyListWhenNoRecords() throws Exception {
-            when(service.findAll()).thenReturn(List.of());
+            when(service.findPage(0, 100)).thenReturn(List.of());
 
             mockMvc.perform(get("/api/ip_country"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("acepta ?page y ?size para paginar el listado")
+        void passesPageAndSize() throws Exception {
+            when(service.findPage(3, 50)).thenReturn(List.of(sampleFullResponse(7L)));
+
+            mockMvc.perform(get("/api/ip_country").param("page", "3").param("size", "50"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].id").value(7));
+
+            verify(service).findPage(3, 50);
+        }
+
+        @Test
+        @DisplayName("responde 400 cuando el servicio rechaza la página o el tamaño")
+        void returnsBadRequestOnInvalidPagination() throws Exception {
+            when(service.findPage(0, 5000)).thenThrow(new InvalidRequestException("'size' debe estar entre 1 y 1000"));
+
+            mockMvc.perform(get("/api/ip_country").param("size", "5000"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("'size' debe estar entre 1 y 1000"));
+        }
+
+        @Test
+        @DisplayName("responde 400 cuando size no es numérico")
+        void returnsBadRequestWhenSizeIsNotNumeric() throws Exception {
+            mockMvc.perform(get("/api/ip_country").param("size", "abc"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").exists());
+        }
+
+        @Test
+        @DisplayName("responde 400 cuando la IP consultada no es válida")
+        void returnsBadRequestWhenIpIsInvalid() throws Exception {
+            when(service.findCountryByIp("no-es-ip")).thenThrow(new InvalidRequestException("'ip' no es una IP válida"));
+
+            mockMvc.perform(get("/api/ip_country").param("ip", "no-es-ip"))
+                    .andExpect(status().isBadRequest());
         }
     }
 

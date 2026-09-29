@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "DNS API — IC7602 Redes",
-    "description": "Colección completa del DNS API (Spring Boot). Cubre los endpoints usados por el DNS Interceptor y el CRUD de la DNS UI.\n\n**Variables:**\n- `base_url` — URL base del servicio (default: http://localhost:8080)",
+    "description": "Colección completa del DNS API (Spring Boot). Cubre los endpoints del DNS Interceptor, el CRUD de la DNS UI (registros, IP to Country, targets) y los resultados del Health Checker.\n\n**Variables:**\n- `base_url` — URL base HTTP del servicio (default: http://localhost:8080)\n- `base_url_https` — URL HTTPS con certificado autofirmado (default: https://localhost:8443)\n- `ip_country_id`, `target_id`, `health_result_id` — ids para las peticiones PUT/DELETE",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -9,7 +9,11 @@
       "key": "base_url",
       "value": "http://localhost:8080",
       "type": "string"
-    }
+    },
+    { "key": "base_url_https", "value": "https://localhost:8443", "type": "string" },
+    { "key": "ip_country_id", "value": "1", "type": "string" },
+    { "key": "target_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string" },
+    { "key": "health_result_id", "value": "1", "type": "string" }
   ],
   "item": [
     {
@@ -153,6 +157,90 @@
               "code": 503,
               "header": [{ "key": "Content-Type", "value": "application/json" }],
               "body": "{\n  \"error\": \"Servidor saturado, intente de nuevo\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/exists — por HTTPS (puerto 8443)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_https}}/api/exists?domain=example.com",
+              "host": [
+                "{{base_url_https}}"
+              ],
+              "path": [
+                "api",
+                "exists"
+              ],
+              "query": [
+                {
+                  "key": "domain",
+                  "value": "example.com"
+                }
+              ]
+            },
+            "description": "Mismo endpoint por HTTPS, como lo consume el DNS Interceptor. El certificado es autofirmado: desactiva 'SSL certificate verification' en Postman."
+          },
+          "response": [
+            {
+              "name": "200 — Existe",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"name\": \"example.com\",\n  \"type\": \"single\",\n  \"ttl\": 300,\n  \"ips\": [\n    {\n      \"ip\": \"1.2.3.4\",\n      \"healthy\": true\n    }\n  ],\n  \"counter\": 0\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/dns_resolver — paquete inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/dns_resolver",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "dns_resolver"
+              ]
+            },
+            "description": "Un BASE64 válido que no es un paquete DNS responde 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"AQIDBAU=\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "400 — No es un paquete DNS",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"El campo 'data' no contiene un paquete DNS valido\"\n}"
             }
           ]
         }
@@ -350,6 +438,734 @@
               "code": 404,
               "header": [{ "key": "Content-Type", "value": "application/json" }],
               "body": "{\n  \"error\": \"No existe un registro con el dominio: nuevo.example.com\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DNS UI — IP to Country",
+      "description": "CRUD de rangos IP → país. El listado es paginado (100 por defecto, máximo 1000) porque la tabla tiene cientos de miles de filas. Después de crear un rango, guarda su `id` en la variable `ip_country_id`.",
+      "item": [
+        {
+          "name": "GET /api/ip_country — listar (paginado)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country?page=0&size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ip_country"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Devuelve una página ordenada por id. Parámetros: `page` (desde 0) y `size` (1 a 1000, por defecto 100)."
+          },
+          "response": [
+            {
+              "name": "200 — Primera página",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 1,\n    \"start_ip\": \"10.0.0.0\",\n    \"end_ip\": \"10.0.0.255\",\n    \"country_code\": \"CR\",\n    \"country_name\": \"Costa Rica\",\n    \"city\": \"San José\",\n    \"latitude\": 9.93,\n    \"longitude\": -84.08\n  }\n]"
+            },
+            {
+              "name": "400 — size fuera de rango",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"'size' debe estar entre 1 y 1000\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/ip_country — crear rango",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ip_country"
+              ]
+            },
+            "description": "Crea un rango. `start_ip` y `end_ip` deben ser IPs válidas de la misma familia con `start_ip` <= `end_ip`; `country_code` son 2 letras.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_ip\": \"10.0.0.0\",\n  \"end_ip\": \"10.0.0.255\",\n  \"country_code\": \"CR\",\n  \"country_name\": \"Costa Rica\",\n  \"city\": \"San José\",\n  \"latitude\": 9.93,\n  \"longitude\": -84.08\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 — Creado",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"start_ip\": \"10.0.0.0\",\n  \"end_ip\": \"10.0.0.255\",\n  \"country_code\": \"CR\",\n  \"country_name\": \"Costa Rica\",\n  \"city\": \"San José\",\n  \"latitude\": 9.93,\n  \"longitude\": -84.08\n}"
+            },
+            {
+              "name": "400 — Rango invertido",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"'start_ip' no puede ser mayor que 'end_ip'\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT /api/ip_country/{id} — actualizar rango",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country/{{ip_country_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ip_country",
+                "{{ip_country_id}}"
+              ]
+            },
+            "description": "Actualiza un rango por id. 404 si no existe.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_ip\": \"10.0.0.0\",\n  \"end_ip\": \"10.0.0.255\",\n  \"country_code\": \"US\",\n  \"country_name\": \"Costa Rica\",\n  \"city\": \"San José\",\n  \"latitude\": 9.93,\n  \"longitude\": -84.08\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 — Actualizado",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"start_ip\": \"10.0.0.0\",\n  \"end_ip\": \"10.0.0.255\",\n  \"country_code\": \"US\",\n  \"country_name\": \"Costa Rica\",\n  \"city\": \"San José\",\n  \"latitude\": 9.93,\n  \"longitude\": -84.08\n}"
+            },
+            {
+              "name": "404 — No existe",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"No existe un registro ip_to_country con id: 999\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/ip_country/{id} — eliminar rango",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ip_country/{{ip_country_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ip_country",
+                "{{ip_country_id}}"
+              ]
+            },
+            "description": "Elimina un rango por id. Devuelve 204 sin cuerpo."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminado",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            },
+            {
+              "name": "404 — No existe",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"No existe un registro ip_to_country con id: 999\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DNS UI — Targets",
+      "description": "Servidores destino de los health checks. Cada target cuelga de un registro DNS existente y es único por (registro, IP). Después de crear uno, guarda su `id` en la variable `target_id`.",
+      "item": [
+        {
+          "name": "GET /api/targets — listar todos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/targets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets"
+              ]
+            },
+            "description": "Lista todos los targets."
+          },
+          "response": [
+            {
+              "name": "200 — Lista",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"record_name\": \"nuevo.example.com\",\n    \"ip_address\": \"1.2.3.4\",\n    \"port\": 80,\n    \"check_type\": \"TCP\",\n    \"timeout_ms\": 2000,\n    \"retries\": 3,\n    \"id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n    \"http_path\": null,\n    \"expected_status_codes\": null,\n    \"basic_auth_user\": null,\n    \"basic_auth_pass\": null\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/targets?record_name — filtrar por registro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/targets?record_name=nuevo.example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets"
+              ],
+              "query": [
+                {
+                  "key": "record_name",
+                  "value": "nuevo.example.com"
+                }
+              ]
+            },
+            "description": "Lista los targets de un registro DNS."
+          },
+          "response": [
+            {
+              "name": "200 — Lista",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"record_name\": \"nuevo.example.com\",\n    \"ip_address\": \"1.2.3.4\",\n    \"port\": 80,\n    \"check_type\": \"TCP\",\n    \"timeout_ms\": 2000,\n    \"retries\": 3,\n    \"id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n    \"http_path\": null,\n    \"expected_status_codes\": null,\n    \"basic_auth_user\": null,\n    \"basic_auth_pass\": null\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/targets — crear (TCP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/targets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets"
+              ]
+            },
+            "description": "Crea un target TCP. `port` 1-65535, `timeout_ms` > 0, `retries` >= 0.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"1.2.3.4\",\n  \"port\": 80,\n  \"check_type\": \"TCP\",\n  \"timeout_ms\": 2000,\n  \"retries\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 — Creado",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"1.2.3.4\",\n  \"port\": 80,\n  \"check_type\": \"TCP\",\n  \"timeout_ms\": 2000,\n  \"retries\": 3,\n  \"id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n  \"http_path\": null,\n  \"expected_status_codes\": null,\n  \"basic_auth_user\": null,\n  \"basic_auth_pass\": null\n}"
+            },
+            {
+              "name": "400 — Registro inexistente",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"No existe un registro DNS con el nombre: nuevo.example.com\"\n}"
+            },
+            {
+              "name": "409 — Duplicado",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Ya existe un elemento con esos datos\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/targets — crear (HTTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/targets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets"
+              ]
+            },
+            "description": "Crea un target HTTP: exige `http_path` que empiece con `/`; `expected_status_codes` entre 100 y 599; admite basic auth.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"5.6.7.8\",\n  \"port\": 8080,\n  \"check_type\": \"HTTP\",\n  \"timeout_ms\": 2000,\n  \"retries\": 3,\n  \"http_path\": \"/health\",\n  \"expected_status_codes\": [\n    200,\n    204\n  ],\n  \"basic_auth_user\": \"usuario\",\n  \"basic_auth_pass\": \"clave\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 — Creado",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"5.6.7.8\",\n  \"port\": 8080,\n  \"check_type\": \"HTTP\",\n  \"timeout_ms\": 2000,\n  \"retries\": 3,\n  \"http_path\": \"/health\",\n  \"expected_status_codes\": [\n    200,\n    204\n  ],\n  \"basic_auth_user\": \"usuario\",\n  \"basic_auth_pass\": \"clave\",\n  \"id\": \"1a6d850b-5085-4965-8bea-45c217fea54e\"\n}"
+            },
+            {
+              "name": "400 — check_type inválido",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"'check_type' debe ser TCP o HTTP\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT /api/targets/{id} — actualizar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/targets/{{target_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets",
+                "{{target_id}}"
+              ]
+            },
+            "description": "Actualiza un target por UUID. 404 si no existe, 400 si el id no es un UUID.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"1.2.3.4\",\n  \"port\": 80,\n  \"check_type\": \"TCP\",\n  \"timeout_ms\": 3000,\n  \"retries\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 — Actualizado",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"record_name\": \"nuevo.example.com\",\n  \"ip_address\": \"1.2.3.4\",\n  \"port\": 80,\n  \"check_type\": \"TCP\",\n  \"timeout_ms\": 3000,\n  \"retries\": 3,\n  \"id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n  \"http_path\": null,\n  \"expected_status_codes\": null,\n  \"basic_auth_user\": null,\n  \"basic_auth_pass\": null\n}"
+            },
+            {
+              "name": "404 — No existe",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Target not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/targets/{id} — eliminar",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/targets/{{target_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets",
+                "{{target_id}}"
+              ]
+            },
+            "description": "Elimina un target por UUID."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminado",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/targets?record_name — eliminar los de un registro",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/targets?record_name=nuevo.example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "targets"
+              ],
+              "query": [
+                {
+                  "key": "record_name",
+                  "value": "nuevo.example.com"
+                }
+              ]
+            },
+            "description": "Elimina todos los targets de un dominio. El parámetro es obligatorio: sin él responde 400 y no borra nada."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminados",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health Checker — Resultados",
+      "description": "Historial de chequeos que escriben los Health Checkers (una fila por prueba y ubicación). Usa `checker_latitude`/`checker_longitude` y `latency_ms` para el tipo round-trip.",
+      "item": [
+        {
+          "name": "GET /api/health_results — listar todos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health_results",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health_results"
+              ]
+            },
+            "description": "Lista todos los resultados."
+          },
+          "response": [
+            {
+              "name": "200 — Lista",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 5,\n    \"target_id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n    \"record_name\": \"nuevo.example.com\",\n    \"ip_address\": \"1.2.3.4\",\n    \"is_healthy\": true,\n    \"latency_ms\": 12.5,\n    \"checker_location_id\": \"CR-01\",\n    \"checker_latitude\": 9.8644,\n    \"checker_longitude\": -83.9194,\n    \"checker_country\": \"CR\",\n    \"checker_city\": \"Cartago\",\n    \"checked_at\": \"2026-09-29T00:00:00Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/health_results?record_name — por registro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health_results?record_name=nuevo.example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health_results"
+              ],
+              "query": [
+                {
+                  "key": "record_name",
+                  "value": "nuevo.example.com"
+                }
+              ]
+            },
+            "description": "Resultados de un registro DNS, del más reciente al más antiguo."
+          },
+          "response": [
+            {
+              "name": "200 — Lista",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 5,\n    \"target_id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n    \"record_name\": \"nuevo.example.com\",\n    \"ip_address\": \"1.2.3.4\",\n    \"is_healthy\": true,\n    \"latency_ms\": 12.5,\n    \"checker_location_id\": \"CR-01\",\n    \"checker_latitude\": 9.8644,\n    \"checker_longitude\": -83.9194,\n    \"checker_country\": \"CR\",\n    \"checker_city\": \"Cartago\",\n    \"checked_at\": \"2026-09-29T00:00:00Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/health_results?target_id — por target",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health_results?target_id={{target_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health_results"
+              ],
+              "query": [
+                {
+                  "key": "target_id",
+                  "value": "{{target_id}}"
+                }
+              ]
+            },
+            "description": "Resultados de un target. Un UUID mal formado responde 400."
+          },
+          "response": [
+            {
+              "name": "200 — Lista",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 5,\n    \"target_id\": \"52a41a11-a1ae-4b25-b657-07ad7cbf8a88\",\n    \"record_name\": \"nuevo.example.com\",\n    \"ip_address\": \"1.2.3.4\",\n    \"is_healthy\": true,\n    \"latency_ms\": 12.5,\n    \"checker_location_id\": \"CR-01\",\n    \"checker_latitude\": 9.8644,\n    \"checker_longitude\": -83.9194,\n    \"checker_country\": \"CR\",\n    \"checker_city\": \"Cartago\",\n    \"checked_at\": \"2026-09-29T00:00:00Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/health_results/{id} — eliminar uno",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health_results/{{health_result_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health_results",
+                "{{health_result_id}}"
+              ]
+            },
+            "description": "Elimina un resultado por id. 404 si no existe."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminado",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            },
+            {
+              "name": "404 — No existe",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"HealthResult not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/health_results?record_name — limpiar historial",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health_results?record_name=nuevo.example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health_results"
+              ],
+              "query": [
+                {
+                  "key": "record_name",
+                  "value": "nuevo.example.com"
+                }
+              ]
+            },
+            "description": "Limpia el historial de un registro. El parámetro es obligatorio."
+          },
+          "response": [
+            {
+              "name": "204 — Eliminado",
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
             }
           ]
         }

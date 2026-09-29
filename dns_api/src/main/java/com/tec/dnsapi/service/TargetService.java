@@ -2,8 +2,12 @@ package com.tec.dnsapi.service;
 
 import com.tec.dnsapi.dto.TargetRequest;
 import com.tec.dnsapi.dto.TargetResponse;
+import com.tec.dnsapi.exception.InvalidRequestException;
 import com.tec.dnsapi.model.Target;
+import com.tec.dnsapi.repository.DnsRecordRepository;
 import com.tec.dnsapi.repository.TargetRepository;
+import com.tec.dnsapi.validation.DomainNames;
+import com.tec.dnsapi.validation.TargetValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +21,11 @@ import java.util.stream.Collectors;
 public class TargetService {
 
     private final TargetRepository targetRepository;
+    private final DnsRecordRepository recordRepository;
 
-    public TargetService(TargetRepository targetRepository) {
+    public TargetService(TargetRepository targetRepository, DnsRecordRepository recordRepository) {
         this.targetRepository = targetRepository;
+        this.recordRepository = recordRepository;
     }
 
     public List<TargetResponse> findAll() {
@@ -36,11 +42,13 @@ public class TargetService {
 
     @Transactional
     public TargetResponse create(TargetRequest request) {
+        String checkType = TargetValidator.validate(request);
+        String recordName = requireExistingRecord(request.record_name());
         Target target = new Target(
-                request.record_name(),
-                request.ip_address(),
+                recordName,
+                request.ip_address().trim(),
                 request.port(),
-                request.check_type(),
+                checkType,
                 request.timeout_ms(),
                 request.retries(),
                 request.http_path(),
@@ -56,11 +64,12 @@ public class TargetService {
     public TargetResponse update(UUID id, TargetRequest request) {
         Target target = targetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Target not found"));
-        
-        target.setRecordName(request.record_name());
-        target.setIpAddress(request.ip_address());
+
+        String checkType = TargetValidator.validate(request);
+        target.setRecordName(requireExistingRecord(request.record_name()));
+        target.setIpAddress(request.ip_address().trim());
         target.setPort(request.port());
-        target.setCheckType(request.check_type());
+        target.setCheckType(checkType);
         target.setTimeoutMs(request.timeout_ms());
         target.setRetries(request.retries());
         target.setHttpPath(request.http_path());
@@ -83,6 +92,15 @@ public class TargetService {
     @Transactional
     public void deleteByRecordName(String recordName) {
         targetRepository.deleteByRecordName(recordName);
+    }
+
+    /** Los targets cuelgan de un registro DNS: devuelve el nombre normalizado o falla con 400. */
+    private String requireExistingRecord(String rawName) {
+        String name = DomainNames.normalize(rawName);
+        if (!recordRepository.existsById(name)) {
+            throw new InvalidRequestException("No existe un registro DNS con el nombre: " + name);
+        }
+        return name;
     }
 
     private TargetResponse mapToResponse(Target target) {

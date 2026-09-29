@@ -20,6 +20,35 @@ Registros DNS que el sistema resuelve localmente.
 | `type`  | `text`  | NO       | Uno de: `single`, `multi`, `weight`, `round-trip`, `geo`               |
 | `ttl`   | `int4`  | NO       | TTL en segundos                                                        |
 | `ips`   | `jsonb` | NO       | Array de IPs. Ver sección 2                                            |
+| `counter` | `int4` | NO      | Contador de round-robin (por defecto `0`). Solo avanza en registros `multi` |
+
+### `targets`
+
+Servidores que revisa el Health Checker. Único por (`record_name`, `ip_address`).
+
+| Columna                 | Tipo      | Nullable | Notas                                          |
+| ----------------------- | --------- | -------- | ---------------------------------------------- |
+| `id`                    | `uuid`    | NO       | **PK**                                         |
+| `record_name`           | `text`    | NO       | FK a `records.name`                            |
+| `ip_address`            | `text`    | NO       | IP a revisar                                   |
+| `port`                  | `int4`    | NO       | 1-65535                                        |
+| `check_type`            | `text`    | NO       | `TCP` o `HTTP`                                 |
+| `timeout_ms`, `retries` | `int4`    | NO       | Timeout por intento y cantidad de intentos     |
+| `http_path`             | `text`    | SÍ       | Solo HTTP; empieza con `/`                     |
+| `expected_status_codes` | `int4[]`  | SÍ       | Solo HTTP; códigos HTTP aceptados              |
+| `basic_auth_user`, `basic_auth_pass` | `text` | SÍ | Credenciales basic auth opcionales          |
+
+### `health_results`
+
+Historial de chequeos: una fila por prueba y ubicación del Health Checker.
+
+| Columna                                   | Tipo          | Notas                                           |
+| ----------------------------------------- | ------------- | ----------------------------------------------- |
+| `id`                                      | `int8`        | **PK**                                          |
+| `target_id`, `record_name`, `ip_address`  | `uuid`/`text` | Qué se probó                                    |
+| `is_healthy`, `latency_ms`                | `bool`/`float8` | Resultado por mayoría simple y latencia media |
+| `checker_location_id`, `checker_country`, `checker_city`, `checker_latitude`, `checker_longitude` | `text`/`float8` | Ubicación (simulada) del Health Checker |
+| `checked_at`                              | `timestamptz` | Momento de la prueba                            |
 
 ### `ip_to_country`
 
