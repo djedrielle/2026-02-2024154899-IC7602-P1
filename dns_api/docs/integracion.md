@@ -124,29 +124,15 @@ Juntas forman una ruta de acceso a datos completamente estándar dentro de Java 
 
 ---
 
-## 6. Cómo pienso aplicar esto en mi componente
+## 6. Cómo se aplicó en el componente
 
-Esto es lo que estoy pensando hacer, todavía no es definitivo.
+Se eligió la opción A: JDBC directo con Spring Data JPA, en vez de llamar a la API REST de PostgREST o de usar un SDK no oficial de Java para Supabase.
 
-Voy a usar la opción A que decidí antes, JDBC directo con Spring Data JPA, en vez de llamar a la API REST de PostgREST a mano o usar el SDK no oficial de Java para Supabase.
-
-La interfaz `DnsRecordRepository` que ya tengo definida en la arquitectura no cambia. Por dentro, su implementación va a apoyarse en una interfaz que extienda `JpaRepository`, y yo solo tengo que mapear la entidad `DnsRecordEntity` a la tabla real que se defina.
-
-Tengo que acordarme de usar el Session Pooler en el puerto 5432, no el de transacciones en el 6543, porque Hibernate necesita los prepared statements de sesión.
-
-También tengo que poner `sslmode=require` a mano en la URL de conexión, porque si no el driver puede caer en una conexión sin cifrar sin que yo me dé cuenta.
-
-Las credenciales de Supabase van todas por variable de entorno, nunca las voy a dejar escritas en el `application.yml` ni subidas al repositorio.
-
-### Por resolver
-
-Todavía no tengo el proyecto de Supabase creado, entonces no tengo la URL de conexión real ni las credenciales.
-
-Falta coordinar con el equipo de DNS UI el esquema exacto de las tablas, porque ellos son los que diseñan la base de datos según el enunciado.
-
-Falta escribir la entidad `DnsRecordEntity` y la clase que realmente implemente `DnsRecordRepository` usando JPA.
-
-Falta probar que la conexión funcione de verdad desde el contenedor Docker hacia Supabase.
+- **Repositorios y entidades.** `DnsRecordRepository`, `IpToCountryRepository`, `TargetRepository` y `HealthResultRepository` extienden `JpaRepository`. Las entidades `DnsRecord`, `IpToCountry`, `Target` y `HealthResult` mapean las tablas descritas en `schema.md`. Hibernate valida el esquema al arrancar (`ddl-auto: validate`), así que si una columna cambia en Supabase el API no inicia.
+- **Session Pooler en el puerto 5432**, no el Transaction Pooler del 6543, porque Hibernate necesita prepared statements de sesión. La URL lleva `sslmode=require` explícito para que el driver nunca caiga en una conexión sin cifrar.
+- **Credenciales por variable de entorno** (`SUPABASE_DB_URL`, `SUPABASE_DB_USER`, `SUPABASE_DB_PASSWORD`). Nunca van en `application.yml` ni en el repositorio; en Kubernetes viven en un Secret.
+- **Límite de conexiones.** El Session Pooler de Supabase admite 15 conexiones en total, compartidas con los Health Checkers y cualquier otro cliente. HikariCP abre 10 por defecto, por eso el tamaño del pool se controla con `DB_POOL_SIZE` (5 en Kubernetes) y el Deployment usa la estrategia `Recreate`, para que nunca corran dos pods a la vez.
+- **Verificado** desde el contenedor Docker y desde Kubernetes hacia Supabase.
 
 ### Prompt utilizado (Claude Sonnet 5, Low):
 
