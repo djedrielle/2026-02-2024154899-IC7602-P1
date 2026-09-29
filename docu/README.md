@@ -13,7 +13,7 @@
 
 ## Módulos
 
-- **DNS Interceptor:**
+- **DNS Interceptor:** Aplicación desarrollada en Rust que escucha en el puerto UDP/53. Esta aplicación recibe paquetes del protocolo DNS, los examina y siguiendo la especificación oficial del RFC2929, los procesa.
 - **DNS API:**
 - **DNS UI:**
 - **Health Checker:**
@@ -24,11 +24,22 @@
 
 ## Diagrama de Flujo
 
-«»
+![Diagrama de Flujo de una Solicitud.](diagrama_flujo.svg)
+*Claude generated.*
 
 ## Estado de funcionalidades
 
-«Tabla con el estado de cada funcionalidad.»
+
+| Módulo          | Funcionalidad                | Estado | Observaciones                                                                                     |
+| --------------- | ---------------------------- | :----: | ------------------------------------------------------------------------------------------------- |
+| DNS Interceptor | Tipo de registro `single`    |   100%   | Devuelve la única IP del registro.                                                                |
+| DNS Interceptor | Tipo de registro `multi`     |   100%   | Round-robin entre las IPs del registro.                                                           |
+| DNS Interceptor | Tipo de registro `round-trip`|   100%   | IP de menor latencia según el checker más cercano; validado con datos simulados de un checker.    |
+| DNS Interceptor | Tipo de registro `weight`    |   100%   | Distribución ponderada según el peso de cada IP.                                                  |
+| DNS Interceptor | Tipo de registro `geo`       |   100%   | Resuelve por país del cliente; en Docker el NAT da origen `ZZ` y usa la IP de respaldo (con IP pública real resuelve correcto). |
+| DNS API         | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
+| Health Checker  | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
+| DNS UI          | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
 
 ## Pruebas realizadas
 
