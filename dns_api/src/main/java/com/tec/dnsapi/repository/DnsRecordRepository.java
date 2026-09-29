@@ -13,7 +13,7 @@ public interface DnsRecordRepository extends JpaRepository<DnsRecord, String> {
      * Usar solo para registros de tipo "multi".
      * Se ejecuta como UPDATE para garantizar atomicidad sin race conditions.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "UPDATE records SET counter = counter + 1 WHERE name = :name", nativeQuery = true)
     void incrementCounter(@Param("name") String name);
 }

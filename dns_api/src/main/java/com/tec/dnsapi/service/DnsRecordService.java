@@ -4,6 +4,8 @@ import com.tec.dnsapi.dto.RecordRequest;
 import com.tec.dnsapi.dto.RecordResponse;
 import com.tec.dnsapi.model.DnsRecord;
 import com.tec.dnsapi.repository.DnsRecordRepository;
+import com.tec.dnsapi.validation.DomainNames;
+import com.tec.dnsapi.validation.RecordValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +34,7 @@ public class DnsRecordService {
      */
     @Transactional
     public Object findByDomain(String domain) {
-        String normalized = normalize(domain);
+        String normalized = DomainNames.normalize(domain);
         return repository.findById(normalized)
                 .<Object>map(r -> {
                     if ("multi".equals(r.getType())) {
@@ -59,7 +61,8 @@ public class DnsRecordService {
 
     @Transactional
     public RecordResponse create(RecordRequest req) {
-        String name = normalize(req.name());
+        RecordValidator.validate(req, true);
+        String name = DomainNames.normalize(req.name());
         if (repository.existsById(name)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Ya existe un registro con el dominio: " + name);
@@ -71,7 +74,8 @@ public class DnsRecordService {
 
     @Transactional
     public RecordResponse update(String name, RecordRequest req) {
-        String normalized = normalize(name);
+        RecordValidator.validate(req, false);
+        String normalized = DomainNames.normalize(name);
         DnsRecord record = repository.findById(normalized)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "No existe un registro con el dominio: " + normalized));
@@ -89,7 +93,7 @@ public class DnsRecordService {
 
     @Transactional
     public void delete(String name) {
-        String normalized = normalize(name);
+        String normalized = DomainNames.normalize(name);
         if (!repository.existsById(normalized)) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "No existe un registro con el dominio: " + normalized);
@@ -102,11 +106,5 @@ public class DnsRecordService {
     private RecordResponse toResponse(DnsRecord r) {
         return new RecordResponse(
                 r.getName(), r.getType(), r.getTtl(), r.getIps(), r.getCounter());
-    }
-
-    private String normalize(String domain) {
-        if (domain == null) return "";
-        String trimmed = domain.trim().toLowerCase();
-        return trimmed.endsWith(".") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 }

@@ -21,7 +21,6 @@ import org.xbill.DNS.Record;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Base64;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,8 +48,9 @@ class DnsResolverServiceTest {
 
         @Test
         @DisplayName("decodifica correctamente un BASE64 válido")
-        void decodesValidBase64() {
-            byte[] original = new byte[] { 0x01, 0x02, 0x03 };
+        void decodesValidBase64() throws Exception {
+            byte[] original = Message.newQuery(
+                    Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN)).toWire();
             String encoded = Base64.getEncoder().encodeToString(original);
             DnsResolverRequest request = new DnsResolverRequest(encoded);
 
@@ -85,6 +85,28 @@ class DnsResolverServiceTest {
             assertThatThrownBy(() -> service.decodeAndValidate(request))
                     .isInstanceOf(InvalidDnsPacketException.class)
                     .hasMessageContaining("obligatorio");
+        }
+
+        @Test
+        @DisplayName("lanza InvalidDnsPacketException cuando el BASE64 no es un paquete DNS")
+        void throwsWhenPacketIsNotDns() {
+            String notDns = Base64.getEncoder().encodeToString(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
+
+            assertThatThrownBy(() -> service.decodeAndValidate(new DnsResolverRequest(notDns)))
+                    .isInstanceOf(InvalidDnsPacketException.class)
+                    .hasMessageContaining("paquete DNS");
+        }
+
+        @Test
+        @DisplayName("lanza InvalidDnsPacketException cuando el paquete DNS está truncado")
+        void throwsWhenPacketIsTruncated() throws Exception {
+            byte[] wire = Message.newQuery(
+                    Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN)).toWire();
+            byte[] truncated = java.util.Arrays.copyOf(wire, wire.length - 6);
+            String encoded = Base64.getEncoder().encodeToString(truncated);
+
+            assertThatThrownBy(() -> service.decodeAndValidate(new DnsResolverRequest(encoded)))
+                    .isInstanceOf(InvalidDnsPacketException.class);
         }
 
         @Test
@@ -161,7 +183,7 @@ class DnsResolverServiceTest {
 
             byte[] rawResponse = response.toWire();
             when(remoteClient.resolve(rawQuery)).thenReturn(rawResponse);
-            when(recordRepository.findById("test.example.com")).thenReturn(Optional.empty());
+            when(recordRepository.existsById("test.example.com")).thenReturn(false);
 
             service.resolveDecoded(rawQuery);
 
@@ -191,7 +213,7 @@ class DnsResolverServiceTest {
 
             byte[] rawResponse = response.toWire();
             when(remoteClient.resolve(rawQuery)).thenReturn(rawResponse);
-            when(recordRepository.findById("multi.example.com")).thenReturn(Optional.empty());
+            when(recordRepository.existsById("multi.example.com")).thenReturn(false);
 
             service.resolveDecoded(rawQuery);
 
@@ -206,8 +228,8 @@ class DnsResolverServiceTest {
         }
 
         @Test
-        @DisplayName("actualiza el registro si ya existía en la BD")
-        void updatesExistingRecordInDatabase() throws Exception {
+        @DisplayName("no sobrescribe un registro que ya existía en la BD")
+        void doesNotOverwriteExistingRecord() throws Exception {
             byte[] rawQuery = new byte[] { 0x01 };
 
             Message response = new Message();
@@ -216,18 +238,13 @@ class DnsResolverServiceTest {
             response.addRecord(Record.newRecord(domain, Type.A, DClass.IN), Section.QUESTION);
             response.addRecord(new ARecord(domain, DClass.IN, 60, InetAddress.getByName("1.1.1.1")), Section.ANSWER);
 
-            byte[] rawResponse = response.toWire();
-            when(remoteClient.resolve(rawQuery)).thenReturn(rawResponse);
+            when(remoteClient.resolve(rawQuery)).thenReturn(response.toWire());
+            when(recordRepository.existsById("existing.com")).thenReturn(true);
 
-            DnsRecord existing = new DnsRecord("existing.com", "single", 300, java.util.List.of());
-            when(recordRepository.findById("existing.com")).thenReturn(Optional.of(existing));
+            DnsResolverResponse result = service.resolveDecoded(rawQuery);
 
-            service.resolveDecoded(rawQuery);
-
-            verify(recordRepository).save(existing);
-            assertThat(existing.getTtl()).isEqualTo(60);
-            assertThat(existing.getIps()).hasSize(1);
-            assertThat(existing.getIps().get(0)).containsEntry("ip", "1.1.1.1");
+            assertThat(result.data()).isNotBlank();
+            verify(recordRepository, never()).save(any());
         }
 
         @Test
@@ -243,7 +260,7 @@ class DnsResolverServiceTest {
 
             byte[] rawResponse = response.toWire();
             when(remoteClient.resolve(rawQuery)).thenReturn(rawResponse);
-            when(recordRepository.findById("faildb.com")).thenThrow(new RuntimeException("DB connection error"));
+            when(recordRepository.existsById("faildb.com")).thenThrow(new RuntimeException("DB connection error"));
 
             DnsResolverResponse result = service.resolveDecoded(rawQuery);
 

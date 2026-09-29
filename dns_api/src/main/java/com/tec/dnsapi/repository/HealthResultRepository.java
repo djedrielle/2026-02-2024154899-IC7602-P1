@@ -9,5 +9,4 @@ public interface HealthResultRepository extends JpaRepository<HealthResult, Long
     List<HealthResult> findByRecordNameOrderByCheckedAtDesc(String recordName);
     List<HealthResult> findByTargetIdOrderByCheckedAtDesc(UUID targetId);
     void deleteByRecordName(String recordName);
-    void deleteByTargetId(UUID targetId);
 }
