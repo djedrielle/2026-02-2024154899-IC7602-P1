@@ -25,16 +25,18 @@ public class IpCountryController {
 
     /**
      * Con ?ip=X → devuelve {"country_code":"CR"} o false (Interceptor)
-     * Sin param → devuelve la lista completa List<IpToCountryFullResponse> (DNS UI)
+     * Sin param → devuelve una página (?page=0&size=100, máx. 1000) de List<IpToCountryFullResponse> (DNS UI)
      */
     @GetMapping("/ip_country")
     public ResponseEntity<Object> ipCountry(
-            @RequestParam(required = false) String ip) {
+            @RequestParam(required = false) String ip,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "" + IpCountryService.DEFAULT_PAGE_SIZE) int size) {
 
         if (ip != null && !ip.isBlank()) {
             return ResponseEntity.ok(service.findCountryByIp(ip.trim()));
         }
-        return ResponseEntity.ok(service.findAll());
+        return ResponseEntity.ok(service.findPage(page, size));
     }
 
     // -------------------------------------------------------------------------
