@@ -6,8 +6,17 @@ metadata:
   labels:
     app: dns-api
 data:
-  SERVER_PORT: "8080"
+  # HTTPS en 8443 (interceptor). HTTP_PORT deja además un puerto HTTP para la DNS UI en el navegador.
+  SERVER_PORT: "8443"
+  HTTP_PORT: "8080"
+  SSL_ENABLED: "true"
+  SSL_KEYSTORE_PATH: "/tmp/dns-api-keystore.p12"
+  SSL_CERT_CN: "dns-api"
   DNS_REMOTE_HOST: "8.8.8.8"
+  # Timeout por intento del DNS remoto; con 1 reintento (DNS_REMOTE_RETRIES=1) el peor caso total es 5 s.
+  DNS_REMOTE_TIMEOUT_MS: "2500"
+  # Supabase (session pooler) admite 15 conexiones en total; Hikari usa 10 por defecto.
+  DB_POOL_SIZE: "5"
   # Origen de la UI para CORS: debe coincidir con la URL desde la que el navegador abre dns-ui
   # (NodePort 30080 del Service dns-ui).
   DNS_UI_ORIGIN: "http://localhost:30080"
