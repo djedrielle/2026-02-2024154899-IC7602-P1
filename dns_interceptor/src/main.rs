@@ -308,7 +308,7 @@ fn geo_ip(ips: &[serde_json::Value], codigo_pais : &str) -> Option<String> {
 }
 
 // Distancia en km entre dos coordenadas (haversine). Sirve para medir la
-// cercanía entre el cliente y cada health checker.
+// cercanía entre el cliente y cada health checker
 fn haversine_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let radio = 6371.0_f64;
     let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
