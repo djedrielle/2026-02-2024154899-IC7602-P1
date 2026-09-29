@@ -10,7 +10,7 @@ public class CorsConfig implements WebMvcConfigurer {
 
     private final String dnsUiOrigin;
 
-    public CorsConfig(@Value("${dns.ui.origin:http://localhost:3000}") String dnsUiOrigin) {
+    public CorsConfig(@Value("${dns.ui.origin}") String dnsUiOrigin) {
         this.dnsUiOrigin = dnsUiOrigin;
     }
 
