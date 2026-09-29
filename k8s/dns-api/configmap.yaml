@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-api-config
+  namespace: dns
+  labels:
+    app: dns-api
+data:
+  SERVER_PORT: "8080"
+  DNS_REMOTE_HOST: "8.8.8.8"
+  # Origen de la UI para CORS: debe coincidir con la URL desde la que el navegador abre dns-ui
+  # (NodePort 30080 del Service dns-ui).
+  DNS_UI_ORIGIN: "http://localhost:30080"

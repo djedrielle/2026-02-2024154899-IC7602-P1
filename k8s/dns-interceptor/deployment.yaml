@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-interceptor
+  namespace: dns
+  labels:
+    app: dns-interceptor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-interceptor
+  template:
+    metadata:
+      labels:
+        app: dns-interceptor
+    spec:
+      containers:
+        - name: dns-interceptor
+          image: dns-interceptor:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: dns
+              containerPort: 53
+              protocol: UDP
+          envFrom:
+            - configMapRef:
+                name: dns-interceptor-config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          # UDP no admite tcpSocket ni httpGet: se comprueba que el socket UDP :53
+          # (0x0035) siga abierto en /proc/net/udp. No valida la resolución de extremo a extremo.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0035 ' /proc/net/udp"]
+            periodSeconds: 2
+            failureThreshold: 15
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0035 ' /proc/net/udp"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0035 ' /proc/net/udp"]
+            periodSeconds: 20
+            failureThreshold: 3

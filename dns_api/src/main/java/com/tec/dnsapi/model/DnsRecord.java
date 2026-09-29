@@ -28,7 +28,7 @@ public class DnsRecord {
     /**
      * Contador de round-robin para registros de tipo "multi".
      * Se incrementa atómicamente en cada consulta a /api/exists.
-     * Para otros tipos siempre es null.
+     * Para otros tipos se queda en 0: la columna es NOT NULL en la base.
      */
     @Column(name = "counter")
     private Integer counter;
@@ -40,7 +40,7 @@ public class DnsRecord {
         this.type = type;
         this.ttl = ttl;
         this.ips = ips;
-        this.counter = "multi".equals(type) ? 0 : null;
+        this.counter = 0;
     }
 
     public String getName()                        { return name; }

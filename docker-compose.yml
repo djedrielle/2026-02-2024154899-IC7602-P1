@@ -1,0 +1,58 @@
+services:
+  dns-api:
+    build:
+      context: ./dns_api
+      dockerfile: Dockerfile
+    container_name: dns-api
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    env_file:
+      - ./dns_api/.env
+    restart: unless-stopped
+    networks:
+      - dns-net
+
+  dns-ui:
+    build:
+      context: ./dns-ui
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DNS_API_URL: ${NEXT_PUBLIC_DNS_API_URL:-http://localhost:8080}
+    container_name: dns-ui
+    ports:
+      - "${DNS_UI_PORT:-3000}:3000"
+    depends_on:
+      - dns-api
+    restart: unless-stopped
+    networks:
+      - dns-net
+
+  dns-interceptor:
+    build:
+      context: ./dns_interceptor
+      dockerfile: Dockerfile
+    container_name: dns-interceptor
+    ports:
+      - "${DNS_INTERCEPTOR_PORT:-15353}:53/udp"
+    environment:
+      DNS_API_URL: ${DNS_API_URL:-http://dns-api:8080}
+    depends_on:
+      - dns-api
+    restart: unless-stopped
+    networks:
+      - dns-net
+
+  health-checker:
+    build:
+      context: ./health_checker
+      dockerfile: Dockerfile
+    container_name: health-checker
+    env_file:
+      - ./health_checker/.env
+    restart: unless-stopped
+    networks:
+      - dns-net
+
+networks:
+  dns-net:
+    driver: bridge
