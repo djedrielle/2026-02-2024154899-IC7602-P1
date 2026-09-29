@@ -1,0 +1,232 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1070" height="1520" viewBox="0 0 1070 1520" font-family="'Segoe UI',Arial,Helvetica,sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <style>
+      text{fill:#0f172a;}
+      .proc{fill:#DBEAFE;stroke:#2563eb;stroke-width:2;}
+      .api{fill:#EDE9FE;stroke:#7c3aed;stroke-width:2;}
+      .type{fill:#CCFBF1;stroke:#0d9488;stroke-width:2;}
+      .dec{fill:#FEF3C7;stroke:#d97706;stroke-width:2;}
+      .bad{fill:#FEE2E2;stroke:#dc2626;stroke-width:2;}
+      .term{fill:#1e293b;stroke:#0f172a;stroke-width:2;}
+      .note{fill:#FEFCE8;stroke:#ca8a04;stroke-width:1.5;stroke-dasharray:5 4;}
+      .edge{fill:none;stroke:#475569;stroke-width:2;}
+      .ttl{font-size:14px;}
+      .sub{font-size:12px;fill:#334155;}
+      .wt{fill:#ffffff;}
+      .lbl{font-size:12px;font-weight:700;fill:#475569;}
+      .code{font-family:'Consolas','Courier New',monospace;}
+      .name{font-size:14px;font-weight:700;}
+    </style>
+  </defs>
+
+  <!-- fondo -->
+  <rect width="1070" height="1520" fill="#ffffff"/>
+
+  <!-- titulo -->
+  <text x="40" y="40" font-size="22" font-weight="700">Flujo de una solicitud DNS en la plataforma</text>
+  <text x="40" y="62" font-size="13" fill="#475569">DNS Interceptor · DNS API · resolución por tipo de registro y reenvío de dominios externos</text>
+
+  <!-- leyenda -->
+  <g>
+    <rect x="742" y="12" width="312" height="158" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="756" y="34" font-size="13" font-weight="700">Leyenda</text>
+    <rect x="756" y="46" width="14" height="14" rx="3" class="term"/><text x="778" y="58" font-size="12">Inicio / fin</text>
+    <rect x="756" y="68" width="14" height="14" rx="3" class="proc"/><text x="778" y="80" font-size="12">Proceso interno del interceptor</text>
+    <rect x="756" y="90" width="14" height="14" rx="3" class="dec"/><text x="778" y="102" font-size="12">Decisión</text>
+    <rect x="756" y="112" width="14" height="14" rx="3" class="api"/><text x="778" y="124" font-size="12">Llamada HTTP al DNS API</text>
+    <rect x="756" y="134" width="14" height="14" rx="3" class="type"/><text x="778" y="146" font-size="12">Resolución por tipo de registro</text>
+    <rect x="756" y="156" width="14" height="14" rx="3" class="bad"/><text x="778" y="168" font-size="12">Fin sin respuesta / descarte</text>
+  </g>
+
+  <g transform="translate(0,60)">
+
+    <!-- ===================== EDGES ===================== -->
+    <!-- spine -->
+    <path class="edge" d="M530,67 L530,108" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,162 L530,201" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,249 L530,270" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,370 L530,396" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,444 L530,484" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,536 L530,560" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,660 L530,686" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,734 L530,768" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,852 L530,867" marker-end="url(#arrow)"/>
+
+    <!-- N4 No -> descarte -->
+    <path class="edge" d="M670,320 L740,320" marker-end="url(#arrow)"/>
+    <!-- N7 No -> rama externa -->
+    <path class="edge" d="M390,610 L160,610 L160,674" marker-end="url(#arrow)"/>
+    <!-- N9 No -> sin IPs -->
+    <path class="edge" d="M675,810 L735,810" marker-end="url(#arrow)"/>
+
+    <!-- rama externa vertical -->
+    <path class="edge" d="M160,726 L160,764" marker-end="url(#arrow)"/>
+    <path class="edge" d="M160,816 L160,854" marker-end="url(#arrow)"/>
+    <path class="edge" d="M160,906 L160,935" marker-end="url(#arrow)"/>
+
+    <!-- fan N10 -> tipos -->
+    <path class="edge" d="M530,963 L130,1011" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,963 L330,1011" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,963 L530,1011" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,963 L730,1011" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,963 L930,1011" marker-end="url(#arrow)"/>
+
+    <!-- geo y round-trip -> su llamada API -->
+    <path class="edge" d="M730,1069 L730,1104" marker-end="url(#arrow)"/>
+    <path class="edge" d="M930,1069 L930,1104" marker-end="url(#arrow)"/>
+
+    <!-- drops al bus (sin flecha) -->
+    <path class="edge" d="M130,1069 L130,1200"/>
+    <path class="edge" d="M330,1069 L330,1200"/>
+    <path class="edge" d="M530,1069 L530,1200"/>
+    <path class="edge" d="M730,1156 L730,1200"/>
+    <path class="edge" d="M930,1156 L930,1200"/>
+    <!-- bus -->
+    <path class="edge" d="M130,1200 L930,1200"/>
+    <path class="edge" d="M530,1200 L530,1228" marker-end="url(#arrow)"/>
+
+    <!-- construir -> responder -> fin -->
+    <path class="edge" d="M530,1282 L530,1316" marker-end="url(#arrow)"/>
+    <path class="edge" d="M530,1364 L530,1395" marker-end="url(#arrow)"/>
+
+    <!-- etiquetas Si/No -->
+    <text x="545" y="390" class="lbl">Sí</text>
+    <text x="698" y="312" class="lbl">No</text>
+    <text x="545" y="678" class="lbl">Sí</text>
+    <text x="298" y="600" class="lbl">No</text>
+    <text x="545" y="866" class="lbl">Sí</text>
+    <text x="700" y="802" class="lbl">No</text>
+
+    <!-- ===================== NODES ===================== -->
+    <!-- N1 inicio -->
+    <rect x="370" y="23" width="320" height="44" rx="22" class="term"/>
+    <text text-anchor="middle" x="530" y="43" class="ttl wt">Cliente envía consulta DNS</text>
+    <text text-anchor="middle" x="530" y="59" class="sub wt">(UDP · puerto 53)</text>
+
+    <!-- N2 -->
+    <rect x="345" y="108" width="370" height="54" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="132" class="ttl">El interceptor recibe el datagrama</text>
+    <text text-anchor="middle" x="530" y="150" class="sub">y lanza un hilo por solicitud (concurrencia)</text>
+
+    <!-- N3 -->
+    <rect x="375" y="201" width="310" height="48" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="230" class="ttl">Extraer del header: QR y Opcode</text>
+
+    <!-- N4 decision -->
+    <polygon points="530,270 670,320 530,370 390,320" class="dec"/>
+    <text text-anchor="middle" x="530" y="316" class="ttl">¿Consulta estándar?</text>
+    <text text-anchor="middle" x="530" y="333" class="sub">(QR = 0, Opcode = 0)</text>
+
+    <!-- N4 No -->
+    <rect x="740" y="294" width="292" height="52" rx="8" class="bad"/>
+    <text text-anchor="middle" x="886" y="317" class="ttl">Descartar la consulta</text>
+    <text text-anchor="middle" x="886" y="334" class="sub">log: «No estandar query»</text>
+
+    <!-- N5 -->
+    <rect x="375" y="396" width="310" height="48" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="425" class="ttl">Extraer el dominio (QNAME)</text>
+
+    <!-- N6 API exists -->
+    <rect x="380" y="484" width="300" height="52" rx="8" class="api"/>
+    <text text-anchor="middle" x="530" y="507" class="ttl">Consultar al DNS API</text>
+    <text text-anchor="middle" x="530" y="524" class="sub code">GET /api/exists?domain</text>
+
+    <!-- N7 decision existe -->
+    <polygon points="530,560 670,610 530,660 390,610" class="dec"/>
+    <text text-anchor="middle" x="530" y="615" class="ttl">¿Existe el registro?</text>
+
+    <!-- Rama externa L1 -->
+    <rect x="45" y="674" width="230" height="52" rx="8" class="api"/>
+    <text text-anchor="middle" x="160" y="697" class="sub code">POST /api/dns_resolver</text>
+    <text text-anchor="middle" x="160" y="715" class="sub">(consulta original en BASE64)</text>
+
+    <!-- L2 -->
+    <rect x="45" y="764" width="230" height="52" rx="8" class="proc"/>
+    <text text-anchor="middle" x="160" y="787" class="ttl">El DNS remoto resuelve</text>
+    <text text-anchor="middle" x="160" y="805" class="sub">y devuelve la respuesta</text>
+
+    <!-- L3 -->
+    <rect x="45" y="854" width="230" height="52" rx="8" class="proc"/>
+    <text text-anchor="middle" x="160" y="877" class="ttl">Enviar la respuesta al</text>
+    <text text-anchor="middle" x="160" y="895" class="sub">cliente (send_to)</text>
+
+    <!-- L fin -->
+    <rect x="60" y="935" width="200" height="40" rx="20" class="term"/>
+    <text text-anchor="middle" x="160" y="960" class="ttl wt">Respuesta entregada</text>
+
+    <!-- N8 -->
+    <rect x="360" y="686" width="340" height="48" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="715" class="ttl">Filtrar IPs con <tspan class="code">healthy: true</tspan></text>
+
+    <!-- N9 decision saludables -->
+    <polygon points="530,768 675,810 530,852 385,810" class="dec"/>
+    <text text-anchor="middle" x="530" y="815" class="ttl">¿Hay IPs saludables?</text>
+
+    <!-- N9 No -->
+    <rect x="735" y="782" width="300" height="56" rx="8" class="bad"/>
+    <text text-anchor="middle" x="885" y="805" class="ttl">Sin respuesta</text>
+    <text text-anchor="middle" x="885" y="823" class="sub">log: «No se encontraron IPs saludables»</text>
+
+    <!-- N10 decision tipo -->
+    <polygon points="530,867 680,915 530,963 380,915" class="dec"/>
+    <text text-anchor="middle" x="530" y="920" class="ttl">Tipo de registro</text>
+
+    <!-- Tipos -->
+    <rect x="55" y="1011" width="150" height="58" rx="8" class="type"/>
+    <text text-anchor="middle" x="130" y="1036" class="name code">single</text>
+    <text text-anchor="middle" x="130" y="1055" class="sub">→ su única IP</text>
+
+    <rect x="255" y="1011" width="150" height="58" rx="8" class="type"/>
+    <text text-anchor="middle" x="330" y="1036" class="name code">multi</text>
+    <text text-anchor="middle" x="330" y="1055" class="sub">→ round-robin</text>
+
+    <rect x="455" y="1011" width="150" height="58" rx="8" class="type"/>
+    <text text-anchor="middle" x="530" y="1036" class="name code">weight</text>
+    <text text-anchor="middle" x="530" y="1055" class="sub">→ ponderado por peso</text>
+
+    <rect x="655" y="1011" width="150" height="58" rx="8" class="type"/>
+    <text text-anchor="middle" x="730" y="1036" class="name code">geo</text>
+    <text text-anchor="middle" x="730" y="1055" class="sub">→ IP por país</text>
+
+    <rect x="855" y="1011" width="150" height="58" rx="8" class="type"/>
+    <text text-anchor="middle" x="930" y="1036" class="name code">round-trip</text>
+    <text text-anchor="middle" x="930" y="1055" class="sub">→ menor latencia</text>
+
+    <!-- llamada API geo -->
+    <rect x="625" y="1104" width="210" height="52" rx="8" class="api"/>
+    <text text-anchor="middle" x="730" y="1127" class="sub code">GET /api/ip_country</text>
+    <text text-anchor="middle" x="730" y="1145" class="sub">(país del cliente)</text>
+
+    <!-- llamada API round-trip -->
+    <rect x="815" y="1104" width="230" height="52" rx="8" class="api"/>
+    <text text-anchor="middle" x="930" y="1127" class="sub code">GET /api/latency → rtt_ip()</text>
+    <text text-anchor="middle" x="930" y="1145" class="sub">(checker cercano + latencia)</text>
+
+    <!-- N11 construir -->
+    <rect x="300" y="1228" width="460" height="54" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="1252" class="ttl"><tspan class="code">construir_respuesta</tspan></text>
+    <text text-anchor="middle" x="530" y="1270" class="sub">arma el paquete DNS con la IP elegida</text>
+
+    <!-- N12 responder -->
+    <rect x="340" y="1316" width="380" height="48" rx="8" class="proc"/>
+    <text text-anchor="middle" x="530" y="1345" class="ttl"><tspan class="code">send_to</tspan> → responder al cliente (UDP)</text>
+
+    <!-- N13 fin -->
+    <rect x="430" y="1395" width="200" height="40" rx="20" class="term"/>
+    <text text-anchor="middle" x="530" y="1420" class="ttl wt">Respuesta entregada</text>
+
+    <!-- nota resiliencia -->
+    <rect x="40" y="1285" width="255" height="150" rx="8" class="note"/>
+    <text x="54" y="1310" font-size="13" font-weight="700" fill="#854d0e">Resiliencia</text>
+    <text x="54" y="1332" class="sub">Cualquier error en una solicitud</text>
+    <text x="54" y="1350" class="sub">(API caída, paquete inválido…)</text>
+    <text x="54" y="1368" class="sub">se registra con <tspan class="code">eprintln!</tspan> y el</text>
+    <text x="54" y="1386" class="sub">hilo termina sin detener el</text>
+    <text x="54" y="1404" class="sub">servidor: las demás consultas</text>
+    <text x="54" y="1422" class="sub">se siguen atendiendo.</text>
+
+  </g>
+</svg>
