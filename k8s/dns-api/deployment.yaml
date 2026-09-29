@@ -7,6 +7,9 @@ metadata:
     app: dns-api
 spec:
   replicas: 1
+  # Recreate: un rolling update abriría dos pods a la vez y el pooler de Supabase (15 conexiones) no lo admite.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: dns-api
@@ -22,6 +25,8 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            - name: https
+              containerPort: 8443
           envFrom:
             - configMapRef:
                 name: dns-api-config
