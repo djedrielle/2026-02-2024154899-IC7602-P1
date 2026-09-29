@@ -6,9 +6,9 @@
 #include <libpq-fe.h>
 
 #include "checks.h"
-#include "database_client.h"
+#include "database_client.h"S
 
-#define DEFAULT_INTERVAL_SECONDS 30
+#define DEFAULT_INTERVAL_SECONDS 15 // Tiempo que pasa entre cada ciclo de verificación si no se especifica otro
 
 /* Configuración de esta instancia, leída una sola vez al arrancar. */
 typedef struct {
