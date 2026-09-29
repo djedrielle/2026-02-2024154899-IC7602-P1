@@ -16,7 +16,7 @@
 - **DNS Interceptor:** Aplicación desarrollada en Rust que escucha en el puerto UDP/53. Esta aplicación recibe paquetes del protocolo DNS, los examina y siguiendo la especificación oficial del RFC2929, los procesa.
 - **DNS API:**
 - **DNS UI:**
-- **Health Checker:**
+- **Health Checker:** Aplicación desarrollada en C, tiene un ciclo de vida constante que revisa la base de datos Supabase y realiza solicitudes a los records, y dependiendo del código de respuesta y tiempo de respuesta marca estos records como saludables o no saludables.
 
 ## Ejecutar el proyecto
 
@@ -37,9 +37,10 @@
 | DNS Interceptor | Tipo de registro `round-trip`|   100%   | IP de menor latencia según el checker más cercano; validado con datos simulados de un checker.    |
 | DNS Interceptor | Tipo de registro `weight`    |   100%   | Distribución ponderada según el peso de cada IP.                                                  |
 | DNS Interceptor | Tipo de registro `geo`       |   100%   | Resuelve por país del cliente; en Docker el NAT da origen `ZZ` y usa la IP de respaldo (con IP pública real resuelve correcto). |
-| DNS API         | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
-| Health Checker  | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
-| DNS UI          | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
+| DNS API         | Funcionalidad                |   ⬜     | «Por completar por el responsable del módulo.»                                                    |
+| Health Checker  | Registro de checkeos         |   100%   | Sube a la base de datos un registro de auditoría de todos los checkeos hechos                                                  |
+| Health Checker  | Ciclo de checkeos            |   100%   | Cicla constantemente el programa para revisar el estado de salud de cada target                                                  |
+| DNS UI          | Funcionalidad                |   ⬜     | «Por completar por el responsable del módulo.»                                                    |
 
 ## Pruebas realizadas
 
@@ -197,7 +198,53 @@ y reiniciar `systemd-resolved`.
 
 ### DNS API
 ### DNS UI
+
 ### Health Checker
+
+Las pruebas se ejecutan al correr el programa utilizando Docker, el programa corre en su propio contenedor e irá actualizando en consola todo lo que está pasando
+
+**Como se ve un ciclo de ejecución**
+
+```bash
+[2026-09-29 09:00:00] Health Checker iniciado (Proyecto1_IC7602)...
+[2026-09-29 09:00:00] [HEALTH_CHECKER] location=CR-01 country=CR city=Cartago lat=9.8644 lon=-83.9194
+[2026-09-29 09:00:00] [HEALTH_CHECKER] Conectado a la base de datos
+
+ 
+[2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 1/3 target=1.1.1.1:443 -> UP (14.02ms)
+[2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 2/3 target=1.1.1.1:443 -> UP (13.61ms)
+[2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 3/3 target=1.1.1.1:443 -> UP (14.30ms)
+[2026-09-29 09:00:01] [HEALTH_CHECKER] Resultado final target=1.1.1.1:443 successes=3/3 -> HEALTHY (avg 13.98ms)
+[2026-09-29 09:00:01] [HEALTH_CHECKER] record=dns-cloudflare-single ip=1.1.1.1 actualizado a healthy=true
+ 
+[2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 1/3 target=8.8.8.8:53 -> UP (12.40ms)
+[2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 2/3 target=8.8.8.8:53 -> UP (11.87ms)
+[2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 3/3 target=8.8.8.8:53 -> UP (13.02ms)
+[2026-09-29 09:00:02] [HEALTH_CHECKER] Resultado final target=8.8.8.8:53 successes=3/3 -> HEALTHY (avg 12.43ms)
+[2026-09-29 09:00:02] [HEALTH_CHECKER] record=dns-google-multi ip=8.8.8.8 actualizado a healthy=true
+ 
+[2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 1/3 target=8.8.4.4:53 -> UP (12.11ms)
+[2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 2/3 target=8.8.4.4:53 -> UP (12.55ms)
+[2026-09-29 09:00:03] [HEALTH_CHECKER] [TCP] intento 3/3 target=8.8.4.4:53 -> UP (11.90ms)
+[2026-09-29 09:00:03] [HEALTH_CHECKER] Resultado final target=8.8.4.4:53 successes=3/3 -> HEALTHY (avg 12.19ms)
+[2026-09-29 09:00:03] [HEALTH_CHECKER] record=dns-google-multi ip=8.8.4.4 actualizado a healthy=true
+ 
+[2026-09-29 09:00:03] [HEALTH_CHECKER] [HTTP] intento 1/3 target=neverssl.com:80 -> UP (178.44ms)
+[2026-09-29 09:00:03] [HEALTH_CHECKER] [HTTP] intento 2/3 target=neverssl.com:80 -> UP (181.09ms)
+[2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 3/3 target=neverssl.com:80 -> UP (176.87ms)
+[2026-09-29 09:00:04] [HEALTH_CHECKER] Resultado final target=neverssl.com:80 successes=3/3 -> HEALTHY (avg 178.80ms)
+[2026-09-29 09:00:04] [HEALTH_CHECKER] record=http-plain-single ip=neverssl.com actualizado a healthy=true
+ 
+[2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 1/3 target=54.161.165.160:80 -> DOWN (320.18ms)
+[2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 2/3 target=54.161.165.160:80 -> DOWN (321.51ms)
+[2026-09-29 09:00:05] [HEALTH_CHECKER] [HTTP] intento 3/3 target=54.161.165.160:80 -> DOWN (313.79ms)
+[2026-09-29 09:00:05] [HEALTH_CHECKER] Resultado final target=54.161.165.160:80 successes=0/3 -> UNHEALTHY (avg 318.49ms)
+[2026-09-29 09:00:05] [HEALTH_CHECKER] record=crhoy.com ip=54.161.165.160 actualizado a healthy=false
+```
+
+En este ciclo de vida se observa como se realizan tanto conexiones TCP como HTTP, muestre el target al que se hace y el tiempo que tarda en responder el record, actualiza el estado de cada uno y si recibe el código esperado y el tiempo de respuesta en el umbral esperado se marca como unhealthy.
+
+Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no se recibe el código esperado de respuesta, ya que la ip no coincide con una ip válida para el record
 
 ## Video de demostración
 
@@ -220,3 +267,4 @@ y reiniciar `systemd-resolved`.
 2. Agregar validación de límites (bounds checks) al indexado de bytes en
    `extraer_host`/`construir_respuesta` para blindar el parseo ante paquetes mal formados.
 3. Tratar de disminuir la latencia de la plataforma a la hora de resolver dominios externos es clave para lograr una utilización cómo en caso de querer utilizar el intercpetor como DNS del sistema.
+4. Conocer el límite de conexiones que se permite desde la plataforma de supabase, así se evita usar conexiones de tipo transaction.
