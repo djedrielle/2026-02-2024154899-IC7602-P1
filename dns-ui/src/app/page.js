@@ -18,11 +18,14 @@ function emptyTarget(type) {
 function emptyHealthCheck() {
   return {
     type: "TCP",
+    port: "80",
     timeout: "",
     retries: "",
     interval: "",
     path: "",
     expectedCodes: "",
+    basicAuthUser: "",
+    basicAuthPass: "",
   };
 }
 
@@ -48,7 +51,24 @@ function emptyCountryRecord() {
   };
 }
 
-function recordFromApi(record) {
+function healthCheckFromTargets(targets) {
+  const target = targets[0];
+  if (!target) return emptyHealthCheck();
+
+  return {
+    type: target.check_type ?? "TCP",
+    port: target.port ?? "80",
+    timeout: target.timeout_ms ?? "",
+    retries: target.retries ?? "",
+    interval: "",
+    path: target.http_path ?? "",
+    expectedCodes: (target.expected_status_codes ?? []).join(", "),
+    basicAuthUser: target.basic_auth_user ?? "",
+    basicAuthPass: target.basic_auth_pass ?? "",
+  };
+}
+
+function recordFromApi(record, targets = []) {
   return {
     domain: record.name,
     type: record.type,
@@ -60,7 +80,7 @@ function recordFromApi(record) {
       }
       return { ...target };
     }),
-    healthCheck: emptyHealthCheck(),
+    healthCheck: healthCheckFromTargets(targets),
   };
 }
 
@@ -87,6 +107,39 @@ function recordToApi(record) {
       }
       return targetData;
     }),
+  };
+}
+
+function targetsToApi(record) {
+  const { healthCheck } = record;
+  const expectedStatusCodes = healthCheck.expectedCodes
+    .split(",")
+    .map((code) => Number(code.trim()))
+    .filter((code) => Number.isInteger(code));
+
+  return record.targets.map((target) => ({
+    record_name: record.domain,
+    ip_address: target.ip,
+    port: Number(healthCheck.port),
+    check_type: healthCheck.type,
+    timeout_ms: Number(healthCheck.timeout),
+    retries: Number(healthCheck.retries),
+    http_path: healthCheck.type === "HTTP" ? healthCheck.path : null,
+    expected_status_codes: healthCheck.type === "HTTP" ? expectedStatusCodes : [],
+    basic_auth_user: healthCheck.type === "HTTP" ? healthCheck.basicAuthUser || null : null,
+    basic_auth_pass: healthCheck.type === "HTTP" ? healthCheck.basicAuthPass || null : null,
+  }));
+}
+
+function countryToApi(record) {
+  return {
+    start_ip: record.start_ip,
+    end_ip: record.end_ip,
+    country_code: record.country_code,
+    country_name: record.country_name || null,
+    city: record.city || null,
+    latitude: record.latitude === "" ? null : Number(record.latitude),
+    longitude: record.longitude === "" ? null : Number(record.longitude),
   };
 }
 
@@ -119,6 +172,11 @@ export default function Home() {
   const [recordActionError, setRecordActionError] = useState("");
   const [deletingRecord, setDeletingRecord] = useState("");
   const [countryRecords, setCountryRecords] = useState([]);
+  const [countryLoading, setCountryLoading] = useState(true);
+  const [countryError, setCountryError] = useState("");
+  const [countrySaving, setCountrySaving] = useState(false);
+  const [countryActionError, setCountryActionError] = useState("");
+  const [deletingCountry, setDeletingCountry] = useState("");
   const [recordPanel, setRecordPanel] = useState(null);
   const [countryPanel, setCountryPanel] = useState(null);
   const [recordForm, setRecordForm] = useState(emptyRecord);
@@ -145,9 +203,20 @@ export default function Home() {
           throw new Error("No se pudieron obtener los registros.");
         }
 
-        const data = await response.json();
+        const [data, targetResponse] = await Promise.all([
+          response.json(),
+          fetch(`${apiBaseUrl}/api/targets`),
+        ]);
+        if (!targetResponse.ok) {
+          throw new Error("No se pudieron obtener los targets.");
+        }
+        const targets = await targetResponse.json();
+        const targetsByRecord = targets.reduce((result, target) => {
+          result[target.record_name] = [...(result[target.record_name] ?? []), target];
+          return result;
+        }, {});
         if (isCurrent) {
-          setRecords(data.map(recordFromApi));
+          setRecords(data.map((record) => recordFromApi(record, targetsByRecord[record.name])));
         }
       } catch {
         if (isCurrent) {
@@ -160,7 +229,37 @@ export default function Home() {
       }
     }
 
+    async function loadCountryRecords() {
+      if (!apiBaseUrl) {
+        if (isCurrent) {
+          setCountryError("Configura NEXT_PUBLIC_DNS_API_URL para cargar los rangos.");
+          setCountryLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/ip_country`);
+        if (!response.ok) {
+          throw new Error("No se pudieron obtener los rangos.");
+        }
+        const data = await response.json();
+        if (isCurrent) {
+          setCountryRecords(data);
+        }
+      } catch {
+        if (isCurrent) {
+          setCountryError("No se pudieron cargar los registros IP to Country.");
+        }
+      } finally {
+        if (isCurrent) {
+          setCountryLoading(false);
+        }
+      }
+    }
+
     loadRecords();
+    loadCountryRecords();
 
     return () => {
       isCurrent = false;
@@ -195,6 +294,7 @@ export default function Home() {
 
     setRecordSaving(true);
     setRecordSaveError("");
+    let recordWasSaved = false;
     try {
       const path = isEditingRecord
         ? `/api/records/${encodeURIComponent(recordPanel.currentName)}`
@@ -209,16 +309,42 @@ export default function Home() {
       }
 
       const savedRecord = await response.json();
+      recordWasSaved = true;
+      const targetResponse = await fetch(
+        `${apiBaseUrl}/api/targets?record_name=${encodeURIComponent(savedRecord.name)}`,
+        { method: "DELETE" },
+      );
+      if (!targetResponse.ok) {
+        throw new Error("No se pudo reemplazar la configuración de health check.");
+      }
+
+      const savedTargets = await Promise.all(targetsToApi({
+        ...recordForm,
+        domain: savedRecord.name,
+      }).map(async (target) => {
+        const targetResponse = await fetch(`${apiBaseUrl}/api/targets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(target),
+        });
+        if (!targetResponse.ok) {
+          throw new Error("No se pudo guardar la configuración de health check.");
+        }
+        return targetResponse.json();
+      }));
+      const savedUiRecord = recordFromApi(savedRecord, savedTargets);
       setRecords((currentRecords) =>
         isEditingRecord
           ? currentRecords.map((record, index) =>
-            index === recordPanel.index ? recordFromApi(savedRecord) : record,
+            index === recordPanel.index ? savedUiRecord : record,
           )
-          : [...currentRecords, recordFromApi(savedRecord)],
+          : [...currentRecords, savedUiRecord],
       );
       setRecordPanel(null);
     } catch {
-      setRecordSaveError("No se pudo guardar el registro DNS.");
+      setRecordSaveError(recordWasSaved
+        ? "El registro DNS se guardó, pero no se pudo guardar su health check. Intenta guardar nuevamente."
+        : "No se pudo guardar el registro DNS.");
     } finally {
       setRecordSaving(false);
     }
@@ -234,6 +360,13 @@ export default function Home() {
     setDeletingRecord(record.domain);
     setRecordActionError("");
     try {
+      const targetsResponse = await fetch(
+        `${apiBaseUrl}/api/targets?record_name=${encodeURIComponent(record.domain)}`,
+        { method: "DELETE" },
+      );
+      if (!targetsResponse.ok) {
+        throw new Error("No se pudieron eliminar los targets.");
+      }
       const response = await fetch(
         `${apiBaseUrl}/api/records/${encodeURIComponent(record.domain)}`,
         { method: "DELETE" },
@@ -294,32 +427,77 @@ export default function Home() {
 
   function openNewCountryRecord() {
     setCountryForm(emptyCountryRecord());
+    setCountryActionError("");
     setCountryPanel({ mode: "create" });
   }
 
   function openEditCountryRecord(index) {
     setCountryForm({ ...countryRecords[index] });
     setCountryPanel({ mode: "edit", index });
+    setCountryActionError("");
   }
 
-  function saveCountryRecord(event) {
+  async function saveCountryRecord(event) {
     event.preventDefault();
-    if (isEditingCountry) {
-      setCountryRecords((currentRecords) =>
-        currentRecords.map((record, index) =>
-          index === countryPanel.index ? countryForm : record,
-        ),
-      );
-    } else {
-      setCountryRecords((currentRecords) => [...currentRecords, countryForm]);
+    if (!apiBaseUrl) {
+      setCountryActionError("Configura NEXT_PUBLIC_DNS_API_URL para guardar el rango.");
+      return;
     }
-    setCountryPanel(null);
+
+    setCountrySaving(true);
+    setCountryActionError("");
+    try {
+      const path = isEditingCountry
+        ? `/api/ip_country/${countryForm.id}`
+        : "/api/ip_country";
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        method: isEditingCountry ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(countryToApi(countryForm)),
+      });
+      if (!response.ok) {
+        throw new Error("No se pudo guardar el rango.");
+      }
+      const savedCountry = await response.json();
+      setCountryRecords((currentRecords) =>
+        isEditingCountry
+          ? currentRecords.map((record, index) =>
+            index === countryPanel.index ? savedCountry : record,
+          )
+          : [...currentRecords, savedCountry],
+      );
+      setCountryPanel(null);
+    } catch {
+      setCountryActionError("No se pudo guardar el registro IP to Country.");
+    } finally {
+      setCountrySaving(false);
+    }
   }
 
-  function deleteCountryRecord(index) {
-    setCountryRecords((currentRecords) =>
-      currentRecords.filter((_, recordIndex) => recordIndex !== index),
-    );
+  async function deleteCountryRecord(index) {
+    const record = countryRecords[index];
+    if (!apiBaseUrl) {
+      setCountryActionError("Configura NEXT_PUBLIC_DNS_API_URL para eliminar el rango.");
+      return;
+    }
+
+    setDeletingCountry(record.id);
+    setCountryActionError("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/ip_country/${record.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("No se pudo eliminar el rango.");
+      }
+      setCountryRecords((currentRecords) =>
+        currentRecords.filter((currentRecord) => currentRecord.id !== record.id),
+      );
+    } catch {
+      setCountryActionError("No se pudo eliminar el registro IP to Country.");
+    } finally {
+      setDeletingCountry("");
+    }
   }
 
   function renderTargetFields() {
@@ -454,6 +632,17 @@ export default function Home() {
         )}
         <div className={styles.healthGrid}>
           <label>
+            Puerto
+            <input
+              min="1"
+              max="65535"
+              onChange={(event) => updateHealthCheck("port", event.target.value)}
+              required
+              type="number"
+              value={healthCheck.port}
+            />
+          </label>
+          <label>
             Timeout
             <input
               min="0"
@@ -474,11 +663,10 @@ export default function Home() {
             />
           </label>
           <label>
-            Intervalo entre pruebas
+            Intervalo entre pruebas (pendiente de soporte en API)
             <input
               min="0"
               onChange={(event) => updateHealthCheck("interval", event.target.value)}
-              required
               type="number"
               value={healthCheck.interval}
             />
@@ -493,6 +681,25 @@ export default function Home() {
               value={healthCheck.expectedCodes}
             />
           </label>
+        )}
+        {isHttp && (
+          <div className={styles.healthGrid}>
+            <label>
+              Usuario de basic auth
+              <input
+                onChange={(event) => updateHealthCheck("basicAuthUser", event.target.value)}
+                value={healthCheck.basicAuthUser}
+              />
+            </label>
+            <label>
+              Contraseña de basic auth
+              <input
+                onChange={(event) => updateHealthCheck("basicAuthPass", event.target.value)}
+                type="password"
+                value={healthCheck.basicAuthPass}
+              />
+            </label>
+          </div>
         )}
       </section>
     );
@@ -596,7 +803,17 @@ export default function Home() {
                 + Agregar registro
               </button>
             </div>
-            {countryRecords.length === 0 ? (
+            {countryActionError && <p role="alert">{countryActionError}</p>}
+            {countryLoading ? (
+              <div className={styles.emptyState}>
+                <h2>Cargando registros IP to Country</h2>
+              </div>
+            ) : countryError ? (
+              <div className={styles.emptyState}>
+                <h2>No se pudieron cargar los registros IP to Country</h2>
+                <p>{countryError}</p>
+              </div>
+            ) : countryRecords.length === 0 ? (
               <div className={styles.emptyState}>
                 <h2>No hay registros IP to Country</h2>
                 <p>Agrega un rango de IP y su ubicación asociada.</p>
@@ -622,7 +839,13 @@ export default function Home() {
                         <td>{record.latitude !== "" && record.longitude !== "" ? `${record.latitude}, ${record.longitude}` : "—"}</td>
                         <td className={styles.actions}>
                           <button onClick={() => openEditCountryRecord(index)} type="button">Editar</button>
-                          <button onClick={() => deleteCountryRecord(index)} type="button">Eliminar</button>
+                          <button
+                            disabled={deletingCountry === record.id}
+                            onClick={() => deleteCountryRecord(index)}
+                            type="button"
+                          >
+                            {deletingCountry === record.id ? "Eliminando..." : "Eliminar"}
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -641,7 +864,7 @@ export default function Home() {
               <h2>{isEditingRecord ? "Editar registro DNS" : "Crear registro DNS"}</h2>
               <button aria-label="Cerrar" className={styles.closeButton} onClick={() => setRecordPanel(null)} type="button">×</button>
             </div>
-            <div className={styles.drawerBody}>
+              <div className={styles.drawerBody}>
               <label>
                 Nombre del dominio
                 <input
@@ -759,13 +982,14 @@ export default function Home() {
                     value={countryForm.longitude}
                   />
                 </label>
+                </div>
+                {countryActionError && <p role="alert">{countryActionError}</p>}
               </div>
-            </div>
-            <div className={styles.drawerFooter}>
-              <button className={styles.secondaryButton} onClick={() => setCountryPanel(null)} type="button">Cancelar</button>
-              <button className={styles.primaryButton} type="submit">
-                {isEditingCountry ? "Guardar cambios" : "Guardar registro"}
-              </button>
+              <div className={styles.drawerFooter}>
+                <button className={styles.secondaryButton} onClick={() => setCountryPanel(null)} type="button">Cancelar</button>
+                <button className={styles.primaryButton} disabled={countrySaving} type="submit">
+                  {countrySaving ? "Guardando..." : isEditingCountry ? "Guardar cambios" : "Guardar registro"}
+                </button>
             </div>
           </form>
         </div>
