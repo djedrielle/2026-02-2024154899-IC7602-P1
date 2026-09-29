@@ -14,36 +14,88 @@
 ## Módulos
 
 - **DNS Interceptor:** Aplicación desarrollada en Rust que escucha en el puerto UDP/53. Esta aplicación recibe paquetes del protocolo DNS, los examina y siguiendo la especificación oficial del RFC2929, los procesa.
-- **DNS API:**
+- **DNS API:** API REST desarrollada en Java 21 con Spring Boot. Es el backend central: conecta el DNS Interceptor, la DNS UI y el Health Checker con la base de datos PostgreSQL en Supabase. Resuelve dominios registrados, reenvía los externos a un DNS upstream (8.8.8.8), ubica el país de una IP y ofrece el CRUD de registros, rangos IP-país, targets y resultados de health.
 - **Health Checker:** Aplicación desarrollada en C, tiene un ciclo de vida constante que revisa la base de datos Supabase y realiza solicitudes a los records, y dependiendo del código de respuesta y tiempo de respuesta marca estos records como saludables o no saludables.
 - **DNS UI:** Interfaz web para crear, editar y eliminar registros DNS. También permite configurar health checks y administrar rangos IP por país.
 
-
 ## Ejecutar el proyecto
 
-«Instrucciones de ejecución.»
+### Requisitos
+
+- **Docker Desktop** abierto y con **Kubernetes activado** (Settings → Kubernetes → Enable).
+- `kubectl` y `openssl` instalados.
+- Las **credenciales de la base de datos Supabase** (URL, usuario y contraseña) que entregó el equipo.
+
+1. Abrir una terminal en la carpeta del proyecto.
+2. Ejecutar:
+
+   ```bash
+   make
+   ```
+
+   La primera vez pide las credenciales de Supabase. Después construye las imágenes, despliega los servicios en Kubernetes, prueba que respondan y abre la interfaz web en el navegador. Puede tardar unos minutos.
+
+### Usar el sistema
+
+| Qué                   | Dónde                                 |
+| --------------------- | ------------------------------------- |
+| Interfaz web (DNS UI) | http://localhost:30080                |
+| DNS API               | http://localhost:8080/api/records     |
+| DNS Interceptor       | `dig @127.0.0.1 -p 30053 ejemplo.com` |
+
+Desde la interfaz web se crean los registros DNS, sus health checks y los rangos de IP por país.
+
+### Comandos útiles
+
+```bash
+make k8s-status                  # ver el estado de los servicios
+make k8s-test                    # verificar que todo responde
+make k8s-logs S=dns-api          # ver los logs de un servicio (dns-api, dns-ui, dns-interceptor)
+make k8s-down                    # detener y eliminar el despliegue
+```
+
+### Ejecutar en desarrollo (Docker Compose)
+
+Alternativa más ligera para desarrollo y pruebas locales. Solo requiere Docker y **no debe correr al mismo tiempo que Kubernetes** (usan los mismos puertos; cada uno detiene al otro al iniciar).
+
+```bash
+make dev-up      # configura, construye y levanta los servicios
+make dev-test    # verifica API, UI e interceptor
+make dev-down    # detener
+```
+
+En este modo la interfaz web está en http://localhost:3000 y el interceptor en el puerto `15353` (`dig @127.0.0.1 -p 15353 ejemplo.com`).
+
+Notas:
+
+- Los puertos salen del Makefile y de docker-compose.yml: Kubernetes usa UI 30080, API 8080 (y 8443 por HTTPS) e Interceptor 30053. Compose usa UI 3000, API 8080 e Interceptor 15353.
+- make k8s-down elimina todo el namespace dns, incluidos los Secrets. La próxima vez volverá a pedir credenciales solo si dns_api/.env no las tiene guardadas.
+- Los Health Checkers se despliegan por defecto y escriben en Supabase. Con make CHECKERS=off se despliega sin ellos.
 
 ## Diagrama de Flujo
 
 ![Diagrama de Flujo de una Solicitud.](diagrama_flujo.svg)
-*Claude generated.*
+_Claude generated._
 
 ## Estado de funcionalidades
 
-
-| Módulo          | Funcionalidad                | Estado | Observaciones                                                                                     |
-| --------------- | ---------------------------- | :----: | ------------------------------------------------------------------------------------------------- |
-| DNS Interceptor | Tipo de registro `single`    |   100%   | Devuelve la única IP del registro.                                                                |
-| DNS Interceptor | Tipo de registro `multi`     |   100%   | Round-robin entre las IPs del registro.                                                           |
-| DNS Interceptor | Tipo de registro `round-trip`|   100%   | IP de menor latencia según el checker más cercano; validado con datos simulados de un checker.    |
-| DNS Interceptor | Tipo de registro `weight`    |   100%   | Distribución ponderada según el peso de cada IP.                                                  |
-| DNS Interceptor | Tipo de registro `geo`       |   100%   | Resuelve por país del cliente; en Docker el NAT da origen `ZZ` y usa la IP de respaldo (con IP pública real resuelve correcto). |
-| DNS API         | Funcionalidad                |   ⬜     | «Por completar por el responsable del módulo.»                                                    |
-| Health Checker  | Registro de checkeos         |   100%   | Sube a la base de datos un registro de auditoría de todos los checkeos hechos                                                  |
-| Health Checker  | Ciclo de checkeos            |   100%   | Cicla constantemente el programa para revisar el estado de salud de cada target                                                  |
-| DNS UI          | Registros DNS              |  100%  | Permite crear, editar y eliminar los cinco tipos de registro.                                     |
-| DNS UI          | Health checks              |  100%  | Permite configurar pruebas TCP y HTTP para las IP de un registro.                                 |
-| DNS UI          | Rangos IP por país         |  100%  | Permite crear, editar y eliminar rangos de IP.                                                    |
+| Módulo          | Funcionalidad                           | Estado | Observaciones                                                                                                                   |
+| --------------- | --------------------------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------- |
+| DNS Interceptor | Tipo de registro `single`               |  100%  | Devuelve la única IP del registro.                                                                                              |
+| DNS Interceptor | Tipo de registro `multi`                |  100%  | Round-robin entre las IPs del registro.                                                                                         |
+| DNS Interceptor | Tipo de registro `round-trip`           |  100%  | IP de menor latencia según el checker más cercano; validado con datos simulados de un checker.                                  |
+| DNS Interceptor | Tipo de registro `weight`               |  100%  | Distribución ponderada según el peso de cada IP.                                                                                |
+| DNS Interceptor | Tipo de registro `geo`                  |  100%  | Resuelve por país del cliente; en Docker el NAT da origen `ZZ` y usa la IP de respaldo (con IP pública real resuelve correcto). |
+| DNS API         | Consulta de dominios (`/api/exists`)    |  100%  | Devuelve el registro local o `false` si no existe.                                                                              |
+| DNS API         | Resolución remota (`/api/dns_resolver`) |  100%  | Reenvía el paquete (BASE64) al DNS upstream con reintentos y guarda el dominio nuevo.                                           |
+| DNS API         | IP a país (`/api/ip_country`)           |  100%  | Usa la tabla de rangos IP; sirve al tipo de registro `geo`.                                                                     |
+| DNS API         | CRUD para la UI                         |  100%  | Registros, rangos IP-país, targets y resultados de salud, con validaciones y errores 400/404/409.                               |
+| DNS API         | HTTPS                                   |  100%  | Opcional con `SSL_ENABLED=true` (certificado autofirmado).                                                                      |
+| Health Checker  | Registro de checkeos                    |  100%  | Sube a la base de datos un registro de auditoría de todos los checkeos hechos                                                   |
+| Health Checker  | Ciclo de checkeos                       |  100%  | Cicla constantemente el programa para revisar el estado de salud de cada target                                                 |
+| DNS UI          | Registros DNS                           |  100%  | Permite crear, editar y eliminar los cinco tipos de registro.                                                                   |
+| DNS UI          | Health checks                           |  100%  | Permite configurar pruebas TCP y HTTP para las IP de un registro.                                                               |
+| DNS UI          | Rangos IP por país                      |  100%  | Permite crear, editar y eliminar rangos de IP.                                                                                  |
 
 ## Pruebas realizadas
 
@@ -201,6 +253,74 @@ y reiniciar `systemd-resolved`.
 
 ### DNS API
 
+**Requisitos previos:** el DNS API corriendo en `http://localhost:8080` con credenciales de Supabase válidas. Los comandos usan `curl`. Además hay pruebas unitarias y una colección de Postman.
+
+#### 1. Pruebas unitarias
+
+```bash
+cd dns_api
+mvn test
+```
+
+**Esperado:** `BUILD SUCCESS`. Son 130 pruebas y cubren el 93 % de las líneas.
+
+#### 2. CRUD de registros DNS
+
+**Qué prueba:** crear, listar, actualizar y eliminar un registro.
+
+```bash
+curl -i -X POST http://localhost:8080/api/records -H 'Content-Type: application/json' \
+  -d '{"name":"prueba.example.com","type":"single","ttl":60,"ips":[{"ip":"1.2.3.4","healthy":true}]}'
+curl -s http://localhost:8080/api/records
+curl -i -X PUT http://localhost:8080/api/records/prueba.example.com -H 'Content-Type: application/json' \
+  -d '{"name":"prueba.example.com","type":"single","ttl":120,"ips":[{"ip":"5.6.7.8","healthy":true}]}'
+curl -i -X DELETE http://localhost:8080/api/records/prueba.example.com
+```
+
+**Esperado:** `201`, la lista con el registro, `200` con la IP nueva y `204` al eliminar.
+
+#### 3. Consulta de dominio local (`/api/exists`)
+
+```bash
+# Crear de nuevo prueba.example.com (paso 2, POST) antes de esta consulta
+curl -s "http://localhost:8080/api/exists?domain=pste
+curl -s "http://localhost:8080/api/exists?domain=no-existe.example.com" # no existe
+```
+
+**Esperado:** el objeto del registro en la primerasegunda.
+
+#### 4. Resolución remota (`/api/dns_resolver`)
+
+**Qué prueba:** un paquete DNS en BASE64 se reenvía al DNS upstream y vuelve la respuesta.
+
+```bash
+PKT=$(printf '\x12\x34\x01\x00\x00\x01\x00\x00\x00com\x00\x00\x01\x00\x01' | base64)
+curl -s -X POST http://localhost:8080/api/dns_resolver -H 'Content-Type: application/json' -d "{\"data\":\"$PKT\"}"
+```
+
+**Esperado:** `200` con `{"data":"<respuesta en BAválido (por ejemplo `"abc"`) responde `400`.
+
+#### 5. IP a país (`/api/ip_country`)
+
+```bash
+curl -s "http://localhost:8080/api/ip_country?ip=2
+curl -i "http://localhost:8080/api/ip_country?ip=no-es-ip"
+```
+
+**Esperado:** `{"country_code":"..."}` (o `false` si no hay rango) y `400` para la IP inválida.
+
+#### 6. Validaciones y errores
+
+```bash
+curl -i -X POST http://localhost:8080/api/records -H 'Content-Type: application/json' \
+  -d '{"name":"malo.example.com","type":"otro","tt4"}]}'   # 400: tipo inválido
+curl -i -X DELETE http://localhost:8080/api/records/no-existe.example.com            # 404
+```
+
+**Esperado:** los errores llegan con el formato `{ dos veces el mismo registro devuelve `409`.
+
+> Colección completa: `dns_api/docs/DNS_API.postmaiciones, todos los endpoints).
+
 ### DNS UI
 
 ### Health Checker
@@ -214,31 +334,31 @@ Las pruebas se ejecutan al correr el programa utilizando Docker, el programa cor
 [2026-09-29 09:00:00] [HEALTH_CHECKER] location=CR-01 country=CR city=Cartago lat=9.8644 lon=-83.9194
 [2026-09-29 09:00:00] [HEALTH_CHECKER] Conectado a la base de datos
 
- 
+
 [2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 1/3 target=1.1.1.1:443 -> UP (14.02ms)
 [2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 2/3 target=1.1.1.1:443 -> UP (13.61ms)
 [2026-09-29 09:00:01] [HEALTH_CHECKER] [TCP] intento 3/3 target=1.1.1.1:443 -> UP (14.30ms)
 [2026-09-29 09:00:01] [HEALTH_CHECKER] Resultado final target=1.1.1.1:443 successes=3/3 -> HEALTHY (avg 13.98ms)
 [2026-09-29 09:00:01] [HEALTH_CHECKER] record=dns-cloudflare-single ip=1.1.1.1 actualizado a healthy=true
- 
+
 [2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 1/3 target=8.8.8.8:53 -> UP (12.40ms)
 [2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 2/3 target=8.8.8.8:53 -> UP (11.87ms)
 [2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 3/3 target=8.8.8.8:53 -> UP (13.02ms)
 [2026-09-29 09:00:02] [HEALTH_CHECKER] Resultado final target=8.8.8.8:53 successes=3/3 -> HEALTHY (avg 12.43ms)
 [2026-09-29 09:00:02] [HEALTH_CHECKER] record=dns-google-multi ip=8.8.8.8 actualizado a healthy=true
- 
+
 [2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 1/3 target=8.8.4.4:53 -> UP (12.11ms)
 [2026-09-29 09:00:02] [HEALTH_CHECKER] [TCP] intento 2/3 target=8.8.4.4:53 -> UP (12.55ms)
 [2026-09-29 09:00:03] [HEALTH_CHECKER] [TCP] intento 3/3 target=8.8.4.4:53 -> UP (11.90ms)
 [2026-09-29 09:00:03] [HEALTH_CHECKER] Resultado final target=8.8.4.4:53 successes=3/3 -> HEALTHY (avg 12.19ms)
 [2026-09-29 09:00:03] [HEALTH_CHECKER] record=dns-google-multi ip=8.8.4.4 actualizado a healthy=true
- 
+
 [2026-09-29 09:00:03] [HEALTH_CHECKER] [HTTP] intento 1/3 target=neverssl.com:80 -> UP (178.44ms)
 [2026-09-29 09:00:03] [HEALTH_CHECKER] [HTTP] intento 2/3 target=neverssl.com:80 -> UP (181.09ms)
 [2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 3/3 target=neverssl.com:80 -> UP (176.87ms)
 [2026-09-29 09:00:04] [HEALTH_CHECKER] Resultado final target=neverssl.com:80 successes=3/3 -> HEALTHY (avg 178.80ms)
 [2026-09-29 09:00:04] [HEALTH_CHECKER] record=http-plain-single ip=neverssl.com actualizado a healthy=true
- 
+
 [2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 1/3 target=54.161.165.160:80 -> DOWN (320.18ms)
 [2026-09-29 09:00:04] [HEALTH_CHECKER] [HTTP] intento 2/3 target=54.161.165.160:80 -> DOWN (321.51ms)
 [2026-09-29 09:00:05] [HEALTH_CHECKER] [HTTP] intento 3/3 target=54.161.165.160:80 -> DOWN (313.79ms)
@@ -257,6 +377,7 @@ Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no
 ## Conclusiones y recomendaciones
 
 ### Conclusiones
+
 1. Es posible lograr que el interceptor opere end-to-end como DNS del sistema. En algunas páginas la latencia del de la plataforma puede hacer que no se logre acceder con la comodidad de un resolver normal, pero sí es posible conseguir conexión a internet con esta implementación.
 2. El modelo de concurrencia en Rust (`UdpSocket` compartido con `Arc` y un hilo por
    solicitud) dio un servidor concurrente y resiliente: un fallo en una consulta se
@@ -264,6 +385,8 @@ Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no
 3. La selección `round-trip` (checker más cercano por haversine + menor latencia) se
    validó con mediciones simuladas, confirmando el uso de los health checkers como
    proxy de la ubicación del cliente.
+4. Armar un DNS propio ayuda a entender lo que pasa cada vez que se abre una página web. Como detrás hay un paquete con un formato exacto, una consulta al servidor correcto y una respuesta que debe llegar a tiempo. Ver que cada tipo de registro (`single`, `multi`, `weight`, `geo`, `round-trip`) es una forma distinta de decidir a qué servidor mandar al usuario muestra que el DNS sirve, además de traducir nombres, para repartir carga y elegir el mejor servidor.
+5. Un DNS tiene que ser rápido y no puede fallar aunque algo a su alrededor falle. Cada consulta espera una respuesta al instante, así que se notó cuánto pesa la latencia de la plataforma y por qué hay que decidir qué hacer si el API o un servidor no responden.
 
 ### Recomendaciones
 
@@ -272,3 +395,6 @@ Note como el ultimo registro de crhoy se marca como unhealthy, esto es porque no
    `extraer_host`/`construir_respuesta` para blindar el parseo ante paquetes mal formados.
 3. Tratar de disminuir la latencia de la plataforma a la hora de resolver dominios externos es clave para lograr una utilización cómo en caso de querer utilizar el intercpetor como DNS del sistema.
 4. Conocer el límite de conexiones que se permite desde la plataforma de supabase, así se evita usar conexiones de tipo transaction.
+5. Guardar las respuestas más frecuentes en memoria por el tiempo que indica el TTL, como hacen los DNS reales. Así no se consultaría la base de datos en cada solicitud y el sistema respondería más rápido y aguantaría más consultas.
+6. Poner más de una copia del Interceptor y más Health Checkers en distintas ubicaciones. Hoy, si el Interceptor cae, ya no hay DNS. Con más réplicas el servicio seguiría en pie y la elección `round-trip` y `geo` sería más precisa.
+7. Probar el sistema con más carga y más casos: muchos usuarios a la vez, registros cuyas IPs quedan todas no saludables, y servidores DNS externos que fallan. Son situaciones comunes en un DNS real, y conocer cómo responde el sistema nos diría dónde reforzarlo primero.
