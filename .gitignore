@@ -3,4 +3,4 @@ __pycache__
 dbip-country-lite-2026-09.csv
 2026-08-28-IC7602-2022099320-A2.pdf
 */target
-*/dns_api_mock
+k8s/**/secret.yaml
