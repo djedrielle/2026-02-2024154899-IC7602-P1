@@ -15,7 +15,7 @@
 
 - **DNS Interceptor:** Aplicación desarrollada en Rust que escucha en el puerto UDP/53. Esta aplicación recibe paquetes del protocolo DNS, los examina y siguiendo la especificación oficial del RFC2929, los procesa.
 - **DNS API:**
-- **DNS UI:**
+- **DNS UI:** Interfaz web para crear, editar y eliminar registros DNS. También permite configurar health checks y administrar rangos IP por país.
 - **Health Checker:**
 
 ## Ejecutar el proyecto
@@ -39,7 +39,9 @@
 | DNS Interceptor | Tipo de registro `geo`       |   100%   | Resuelve por país del cliente; en Docker el NAT da origen `ZZ` y usa la IP de respaldo (con IP pública real resuelve correcto). |
 | DNS API         | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
 | Health Checker  | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
-| DNS UI          | Funcionalidad              |   ⬜   | «Por completar por el responsable del módulo.»                                                    |
+| DNS UI          | Registros DNS              |  100%  | Permite crear, editar y eliminar los cinco tipos de registro.                                     |
+| DNS UI          | Health checks              |  100%  | Permite configurar pruebas TCP y HTTP para las IP de un registro.                                 |
+| DNS UI          | Rangos IP por país         |  100%  | Permite crear, editar y eliminar rangos de IP.                                                    |
 
 ## Pruebas realizadas
 
@@ -196,7 +198,57 @@ y reiniciar `systemd-resolved`.
 > (truncación / bit `TC`) o dominios muy grandes pueden fallar.
 
 ### DNS API
+
 ### DNS UI
+
+Las pruebas se hicieron con el DNS API disponible en `http://localhost:8080`.
+
+#### 1. Iniciar la interfaz
+
+Desde la carpeta principal del proyecto:
+
+```bash
+cd dns-ui
+docker compose up --build
+```
+
+Abrir `http://localhost:3000`. La página debe cargar y mostrar los registros DNS.
+
+#### 2. Probar los registros DNS
+
+1. Crear un registro de cada tipo: `single`, `multi`, `weight`, `round-trip` y `geo`.
+2. Editar uno de los registros.
+3. Eliminar uno de los registros.
+
+**Resultado esperado:** los cambios se muestran en la tabla y quedan guardados en el DNS API.
+
+#### 3. Probar los health checks
+
+1. Crear un registro con una prueba TCP.
+2. Editar el registro y cambiar la prueba a HTTP.
+3. Guardar los cambios.
+
+**Resultado esperado:** la interfaz guarda los datos de cada prueba sin errores.
+
+#### 4. Probar los rangos IP por país
+
+1. Crear un rango de IP y asignarle un país.
+2. Editar el rango.
+3. Eliminar el rango.
+
+**Resultado esperado:** los cambios se muestran en la tabla de rangos IP.
+
+#### 5. Revisar el código
+
+```bash
+cd dns-ui
+npm ci
+npm run lint
+npm run build
+```
+
+**Resultado esperado:** los comandos terminan sin errores.
+
 ### Health Checker
 
 ## Video de demostración
