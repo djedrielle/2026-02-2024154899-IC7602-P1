@@ -139,7 +139,30 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 None => { eprintln!("Error obteniendo la IP weight"); return; }
                             };
                         }
-                        Some("round-trip") => println!("rr"),
+                        Some("round-trip") => {
+                            let url_lat = format!("{}/api/latency?domain={}", dns_api_url, domain);
+                            let resp_lat = match client.get(&url_lat).send() {
+                                Ok(r) => r,
+                                Err(e) => { eprintln!("Error consultando /api/latency: {e}"); return; }
+                            };
+                            let latencias: serde_json::Value = match resp_lat.json() {
+                                Ok(j) => j,
+                                Err(e) => { eprintln!("Error parseando /api/latency: {e}"); return; }
+                            };
+                            let filas = match latencias.as_array() {
+                                Some(a) => a,
+                                None => { eprintln!("/api/latency no devolvió una lista"); return; }
+                            };
+                            // Coordenadas aproximadas del cliente a partir de su país
+                            // (None si el país es desconocido -> rtt_ip usa mínimo global)
+                            let cliente_coords = respuesta_ip_country["country_code"]
+                                .as_str()
+                                .and_then(pais_a_coordenadas);
+                            ip = match rtt_ip(filas, cliente_coords) {
+                                Some(v) => v,
+                                None => { eprintln!("No hay IPs sanas con latencia para round-trip"); return; }
+                            };
+                        }
                         Some("geo") => {
                             let codigo_pais = match respuesta_ip_country["country_code"].as_str() {
                                 Some(c) => c,
@@ -275,11 +298,97 @@ fn geo_ip(ips: &[serde_json::Value], codigo_pais : &str) -> Option<String> {
         .find(|e| e["country_code"].as_str() == Some(codigo_pais))
         .and_then(|e| e["ip"].as_str())
         .map(|e| e.to_string());
-    
+
     if ip.is_none() {
         let mut rng = rand::rng();
         ips.choose(&mut rng)?["ip"].as_str().map(|e| e.to_string())
     } else {
         ip
     }
+}
+
+// Distancia en km entre dos coordenadas (haversine). Sirve para medir la
+// cercanía entre el cliente y cada health checker.
+fn haversine_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let radio = 6371.0_f64;
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let dphi = (lat2 - lat1).to_radians();
+    let dlambda = (lon2 - lon1).to_radians();
+    let a = (dphi / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dlambda / 2.0).sin().powi(2);
+    2.0 * radio * a.sqrt().asin()
+}
+
+fn rtt_ip(latencias: &[serde_json::Value], cliente: Option<(f64, f64)>) -> Option<String> {
+    // Determinar el checker más cercano al cliente
+    let checker_cercano: Option<String> = cliente.and_then(|(clat, clon)| {
+        latencias.iter()
+            .filter_map(|r| {
+                let id = r["checker_location_id"].as_str()?;
+                let lat = r["checker_latitude"].as_f64()?;
+                let lon = r["checker_longitude"].as_f64()?;
+                Some((id.to_string(), haversine_km(clat, clon, lat, lon)))
+            })
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, _)| id)
+    });
+
+    // Menor latencia entre las mediciones sanas, opcionalmente restringido a
+    // un checker específico.
+    let elegir = |restringir: Option<&str>| -> Option<String> {
+        latencias.iter()
+            .filter(|r| r["is_healthy"].as_bool() == Some(true))
+            .filter(|r| match restringir {
+                Some(id) => r["checker_location_id"].as_str() == Some(id),
+                None => true,
+            })
+            .filter_map(|r| Some((r["ip"].as_str()?, r["latency_ms"].as_f64()?)))
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(ip, _)| ip.to_string())
+    };
+
+    // Primero el checker más cercano; si no da resultado, mínimo global.
+    elegir(checker_cercano.as_deref()).or_else(|| elegir(None))
+}
+
+// Mapea un código de país ISO-3166 alpha-2 a coordenadas aproximadas (centroide
+// del país). Se usa para estimar la ubicación del cliente a partir del país que
+// devuelve /api/ip_country. Devuelve None si el país no está en la tabla.
+// Generada con Claude Opus 4.8
+fn pais_a_coordenadas(codigo: &str) -> Option<(f64, f64)> {
+    let coords = match codigo {
+        // América
+        "CR" => (9.7489, -83.7534),   "US" => (37.0902, -95.7129),
+        "CA" => (56.1304, -106.3468), "MX" => (23.6345, -102.5528),
+        "GT" => (15.7835, -90.2308),  "PA" => (8.5380, -80.7821),
+        "NI" => (12.8654, -85.2072),  "HN" => (15.2000, -86.2419),
+        "SV" => (13.7942, -88.8965),  "BZ" => (17.1899, -88.4976),
+        "CO" => (4.5709, -74.2973),   "VE" => (6.4238, -66.5897),
+        "BR" => (-14.2350, -51.9253), "AR" => (-38.4161, -63.6167),
+        "CL" => (-35.6751, -71.5430), "PE" => (-9.1900, -75.0152),
+        "EC" => (-1.8312, -78.1834),  "BO" => (-16.2902, -63.5887),
+        "UY" => (-32.5228, -55.7658), "PY" => (-23.4425, -58.4438),
+        // Europa
+        "GB" => (55.3781, -3.4360),   "IE" => (53.1424, -7.6921),
+        "FR" => (46.2276, 2.2137),    "ES" => (40.4637, -3.7492),
+        "PT" => (39.3999, -8.2245),   "DE" => (51.1657, 10.4515),
+        "IT" => (41.8719, 12.5674),   "NL" => (52.1326, 5.2913),
+        "BE" => (50.5039, 4.4699),    "CH" => (46.8182, 8.2275),
+        "AT" => (47.5162, 14.5501),   "SE" => (60.1282, 18.6435),
+        "NO" => (60.4720, 8.4689),    "DK" => (56.2639, 9.5018),
+        "FI" => (61.9241, 25.7482),   "PL" => (51.9194, 19.1451),
+        "RU" => (61.5240, 105.3188),  "UA" => (48.3794, 31.1656),
+        "TR" => (38.9637, 35.2433),
+        // Asia / Oceanía / África
+        "CN" => (35.8617, 104.1954),  "JP" => (36.2048, 138.2529),
+        "KR" => (35.9078, 127.7669),  "IN" => (20.5937, 78.9629),
+        "ID" => (-0.7893, 113.9213),  "SG" => (1.3521, 103.8198),
+        "TH" => (15.8700, 100.9925),  "VN" => (14.0583, 108.2772),
+        "PH" => (12.8797, 121.7740),  "AU" => (-25.2744, 133.7751),
+        "NZ" => (-40.9006, 174.8860), "ZA" => (-30.5595, 22.9375),
+        "EG" => (26.8206, 30.8025),   "NG" => (9.0820, 8.6753),
+        "MA" => (31.7917, -7.0926),   "AE" => (23.4241, 53.8478),
+        "SA" => (23.8859, 45.0792),   "IL" => (31.0461, 34.8516),
+        _ => return None,
+    };
+    Some(coords)
 }
